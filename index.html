@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Mind | Ultimate Brain Training</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Quicksand:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+
+<body>
+    <div id="loader" class="loader-wrapper">
+        <h1 class="logo-text main-title">MASTER<span>MIND</span></h1>
+        <div class="progress-bar-container" style="width: 250px; margin-top: 30px;">
+            <div class="progress-fill" id="loader-progress"></div>
+        </div>
+    </div>
+
+    <div id="app" class="hidden">
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="logo">
+                    <h1 class="logo-text">MASTER<span>MIND</span></h1>
+                </div>
+                <div class="nav-links">
+                    <a href="#" class="nav-item active" data-view="home">Games</a>
+                    <a href="#" class="nav-item" data-view="leaderboard">Leaderboard</a>
+                    <a href="#" class="nav-item" data-view="about">About</a>
+                    <a href="#" class="nav-item" data-view="help">Help</a>
+                </div>
+                <div class="user-profile">
+                    <div class="stats">
+                        <div class="stat-pill">🪙 <span id="coin-count">0</span></div>
+                        <div class="stat-pill">⭐ <span id="star-count">0</span></div>
+                    </div>
+                    <button id="login-btn" class="btn-cta" style="padding: 8px 20px; width: auto;">Login</button>
+                    <div id="user-info" class="hidden">
+                        <span class="user-name" style="margin-right: 10px; font-weight: 600;"></span>
+                        <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar"
+                            style="width: 40px; border-radius: 50%;">
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main id="main-content">
+            <!-- Dynamic Content Injected Here -->
+            <section id="home-view" class="view">
+                <header class="hero" style="text-align: center; margin-bottom: 2rem;">
+                    <h2 class="sub-greeting">Mastering the Mind</h2>
+                    <p>Select your challenge and reach new heights.</p>
+                </header>
+
+                <div class="tabs-container">
+                    <div class="game-tabs-new">
+                        <button class="tab-btn active" data-game="memory">
+                            <div class="tab-icon">🏠</div>
+                            <span>Room Observer</span>
+                        </button>
+                        <button class="tab-btn" data-game="f1">
+                            <div class="tab-icon">🏎️</div>
+                            <span>F1 Reflex</span>
+                        </button>
+                        <button class="tab-btn" data-game="schulte">
+                            <div class="tab-icon">🔢</div>
+                            <span>Schulte Grid</span>
+                        </button>
+                        <button class="tab-btn" data-game="confusion">
+                            <div class="tab-icon">🎨</div>
+                            <span>Color Confusion</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="game-display-area" class="game-display-container">
+                    <!-- Specific game info/start will show here based on active tab -->
+                    <div class="game-card-expanded active" id="memory-preview">
+                        <div class="preview-visual memory">🏘️</div>
+                        <div class="preview-content">
+                            <h3>Room Observer</h3>
+                            <p>Challenge your spatial memory by observing 5 objects and their colors in just 10 seconds.
+                                Perfect for sharpening focus!</p>
+                            <button class="btn-cta play-game-btn" data-game="memory">Play Game</button>
+                        </div>
+                    </div>
+
+                    <div class="game-card-expanded hidden" id="f1-preview">
+                        <div class="preview-visual f1">🏎️</div>
+                        <div class="preview-content">
+                            <h3>F1 Reflex</h3>
+                            <p>Test your reaction speed against legendary F1 drivers. React as soon as the lights go
+                                out. Can you beat Verstappen?</p>
+                            <button class="btn-cta play-game-btn" data-game="f1">Start Racing</button>
+                        </div>
+                    </div>
+
+                    <div class="game-card-expanded hidden" id="schulte-preview">
+                        <div class="preview-visual schulte">🔢</div>
+                        <div class="preview-content">
+                            <h3>Schulte Grid</h3>
+                            <p>Improve visual perception and peripheral vision. Find the numbers 1 to 25 in ascending
+                                order as fast as possible.</p>
+                            <button class="btn-cta play-game-btn" data-game="schulte">Start Finding</button>
+                        </div>
+                    </div>
+
+                    <div class="game-card-expanded hidden" id="confusion-preview">
+                        <div class="preview-visual confusion">🎨</div>
+                        <div class="preview-content">
+                            <h3>Color Confusion</h3>
+                            <p>Master the Stroop Effect! Quickly identify either the physical color or the written text
+                                under intense time pressure.</p>
+                            <button class="btn-cta play-game-btn" data-game="confusion">Start Mixing</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="auth-modal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="game-overlay auth-card">
+            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Welcome Back</h2>
+            <p style="margin-bottom: 2rem; color: #718096;">Sign in to save your progress and compete globally.</p>
+
+            <div class="login-options">
+                <button id="google-login" class="btn-login google">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google">
+                    Continue with Google
+                </button>
+                <button id="gmail-login" class="btn-login gmail">
+                    <img src="https://cdn4.iconfinder.com/data/icons/logos-brands-in-colors/48/google-gmail-512.png"
+                        alt="Gmail">
+                    Login with Gmail
+                </button>
+            </div>
+
+            <button class="close-modal underline-btn">Maybe Later</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
