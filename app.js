@@ -134,11 +134,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // Game Tab Switching
-        document.querySelectorAll('.tab-btn').forEach(btn => {
+        // Game Mode Card Switching
+        document.querySelectorAll('.mode-card').forEach(btn => {
             btn.addEventListener('click', () => {
                 const gameId = btn.getAttribute('data-game');
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.mode-card').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 document.querySelectorAll('.game-card-expanded').forEach(card => {
                     card.classList.add('hidden');
