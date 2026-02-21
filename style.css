@@ -1525,10 +1525,16 @@ h3 {
 
 /* Root wrapper */
 .ro-root {
-    max-width: 800px;
+    width: 100%;
     margin: 0 auto;
     padding: 2rem 1rem 4rem;
     transition: background 0.8s ease-in-out;
+}
+
+.game-container.ro-root {
+    background: transparent !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
 }
 
 /* Header */
@@ -1602,28 +1608,48 @@ h3 {
 /* ── Icon card grid ────────────────────────────────────── */
 .ro-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 1.2rem;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
     margin-bottom: 2rem;
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .ro-icon-card {
     border-radius: 20px;
-    padding: 1.5rem 1rem 1rem;
+    padding: 30px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    justify-content: center;
+    gap: 20px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
     cursor: default;
-    min-height: 160px;
+    min-height: 220px;
+    animation: ro-float 4s ease-in-out infinite;
+}
+
+@keyframes ro-float {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.ro-icon-card:nth-child(even) {
+    animation-delay: -2s;
 }
 
 .ro-icon-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    transform: translateY(-12px) scale(1.02);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
 }
 
 .ro-icon-wrap {
@@ -1645,13 +1671,13 @@ h3 {
 /* Pillar label at the bottom of the card */
 .ro-label-pill {
     background: white;
-    padding: 4px 18px;
+    padding: 10px 28px;
     border-radius: 20px;
-    font-size: 0.85rem;
+    font-size: 1.1rem;
     font-weight: 800;
-    color: #555;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-    margin-top: auto;
+    color: #1a1a2e;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    transition: transform 0.2s ease;
 }
 
 /* Object name chip — grey pill */
@@ -1665,20 +1691,21 @@ h3 {
     letter-spacing: 0.2px;
 }
 
-/* ── Question panel — purple glass ─────────────────────── */
+/* ── Question panel — expanded design ─────────────────────── */
 .ro-question-panel {
     position: relative;
-    background: linear-gradient(135deg, rgba(109, 40, 217, 0.6), rgba(139, 92, 246, 0.45));
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 28px;
-    padding: 2.5rem 2rem;
+    background: linear-gradient(135deg, rgba(109, 40, 217, 0.85), rgba(139, 92, 246, 0.7));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 32px;
+    padding: 4rem 3rem;
     text-align: center;
     overflow: hidden;
-    box-shadow: 0 20px 50px rgba(109, 40, 217, 0.3);
-    max-width: 620px;
-    margin: 0 auto;
+    box-shadow: 0 30px 70px rgba(109, 40, 217, 0.4);
+    width: 95%;
+    max-width: 900px;
+    margin: 1rem auto;
 }
 
 /* Ghost icon watermark */
@@ -1700,11 +1727,11 @@ h3 {
 
 /* Question text */
 .ro-question-text {
-    font-size: 1.5rem;
-    font-weight: 700;
+    font-size: 2.2rem;
+    font-weight: 800;
     color: white;
-    margin-bottom: 1.8rem;
-    line-height: 1.5;
+    margin-bottom: 2.5rem;
+    line-height: 1.3;
     position: relative;
     z-index: 1;
 }
@@ -1740,18 +1767,20 @@ h3 {
 .ro-answer-btn {
     display: flex;
     align-items: center;
-    gap: 10px;
-    background: white;
+    justify-content: center;
+    gap: 15px;
+    background: #ffffff !important;
+    opacity: 1 !important;
     border: none;
-    border-radius: 14px;
-    padding: 13px 18px;
+    border-radius: 18px;
+    padding: 1.2rem;
     font-family: 'Poppins', sans-serif;
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 1.1rem;
+    font-weight: 700;
     color: #2d3748;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
 }
 
 .ro-answer-btn:hover:not(:disabled) {
@@ -1778,10 +1807,106 @@ h3 {
     flex-shrink: 0;
 }
 
+/* ── Lobby & Shop Styles ────────────────────────────────── */
+.ro-lobby-container {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: #1a1a2e;
+    /* Default dark for light backgrounds */
+}
+
+/* Ensure stats are visible in lobby */
+.ro-lobby-container .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.ro-lobby-container .stat-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    opacity: 0.7;
+    letter-spacing: 1px;
+}
+
+.ro-lobby-container .stat-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+}
+
+/* Adjust for dark backgrounds automatically if level > 50 */
+.ro-root[style*="linear-gradient"] {
+    color: white;
+}
+
+.ro-root[style*="linear-gradient"] .stat-label,
+.ro-root[style*="linear-gradient"] .stat-value {
+    color: white;
+}
+
+.ro-shop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem auto;
+    max-width: 700px;
+}
+
+.ro-shop-card {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 24px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+    transition: transform 0.3s ease, background 0.3s ease;
+    color: #1a1a2e;
+}
+
+.ro-root[style*="linear-gradient"] .ro-shop-card {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.ro-shop-card:hover {
+    background: rgba(255, 255, 255, 0.85);
+    transform: translateY(-5px);
+}
+
+.ro-root[style*="linear-gradient"] .ro-shop-card:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.ro-shop-icon {
+    font-size: 2.5rem;
+}
+
+.ro-shop-price {
+    font-weight: 700;
+    color: #fbbf24;
+}
+
+.ro-shop-card .btn-cta.buy-btn {
+    width: auto;
+    min-width: 140px;
+    padding: 10px 24px;
+    font-size: 0.9rem;
+}
+
 /* ── Responsive tweaks for small screens ─────────────────── */
-@media (max-width: 480px) {
+@media (max-width: 768px) {
     .ro-card-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .ro-card-grid {
+        grid-template-columns: 1fr;
     }
 
     .ro-answer-grid {

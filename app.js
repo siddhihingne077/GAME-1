@@ -31,6 +31,8 @@ document.addEventListener('DOMContentLoaded', () => {
         user: JSON.parse(localStorage.getItem('mastermind_user') || 'null'),
         currentView: 'home',
         currentGame: null,
+        currentStage: 'home', // 'home' | 'lobby' | 'playing'
+        activeInterval: null,
         ...DB.load()
     };
 
@@ -168,7 +170,10 @@ document.addEventListener('DOMContentLoaded', () => {
        VIEW ROUTING
        ============================================= */
     function switchView(view) {
+        if (state.activeInterval) clearInterval(state.activeInterval);
         state.currentView = view;
+        state.currentGame = null;
+        state.currentStage = 'home';
 
         document.querySelectorAll('.nav-item').forEach(item => {
             item.classList.toggle('active', item.getAttribute('data-view') === view);
@@ -188,9 +193,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function goBack() {
+        // Sequential navigation logic
+        if (state.currentGame === 'memory' && state.currentStage === 'playing') {
+            if (state.activeInterval) clearInterval(state.activeInterval);
+            initMemoryLobby();
+            return;
+        }
+        if (state.currentGame === 'confusion' && state.currentStage === 'playing') {
+            if (state.activeInterval) clearInterval(state.activeInterval);
+            initConfusionGame();
+            return;
+        }
+
         // Returns to home tab selection (game lobby) without page reload
+        if (state.activeInterval) clearInterval(state.activeInterval);
         state.currentGame = null;
         state.currentView = 'home';
+        state.currentStage = 'home';
 
         // Reset nav active states
         document.querySelectorAll('.nav-item').forEach(item => {
@@ -403,7 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
        ============================================= */
     function startGame(gameId) {
         state.currentGame = gameId;
-        if (gameId === 'memory') initMemoryGame();
+        if (gameId === 'memory') initMemoryLobby();
         else if (gameId === 'f1') initF1Game();
         else if (gameId === 'schulte') initSchulteGame();
         else if (gameId === 'confusion') initConfusionGame();
@@ -415,138 +434,58 @@ document.addEventListener('DOMContentLoaded', () => {
        ============================================= */
 
     // ── Per-object SVG icons + card palette ───────────────────────────────
+    // ── Per-object SVG icons + card palette ───────────────────────────────
     const OBJECT_DATA = {
         Flower: {
-            bg: '#FFF0EE',
+            bg: '#FDF2F2',
             svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="36" cy="36" r="8" fill="currentColor" opacity="0.4"/>
-                <path d="M36 28 Q36 12 48 12 Q56 12 56 24 Q56 36 36 36" stroke="currentColor" stroke-width="4"/>
-                <path d="M36 28 Q36 12 24 12 Q16 12 16 24 Q16 36 36 36" stroke="currentColor" stroke-width="4"/>
-                <path d="M36 44 Q36 60 48 60 Q56 60 56 48 Q56 36 36 36" stroke="currentColor" stroke-width="4"/>
-                <path d="M36 44 Q36 60 24 60 Q16 60 16 48 Q16 36 36 36" stroke="currentColor" stroke-width="4"/>
-                <circle cx="36" cy="36" r="6" stroke="currentColor" stroke-width="3"/>
+                <circle cx="36" cy="36" r="6" stroke="currentColor" stroke-width="4"/>
+                <path d="M36 30c0-6 6-10 12-10s12 4 12 10-6 10-12 10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M36 30c0-6-6-10-12-10S12 24 12 30s6 10 12 10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M36 42c0 6 6 10 12 10s12-4 12-10-6-10-12-10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M36 42c0 6-6 10-12 10S12 48 12 42s6-10 12-10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M36 12v18M36 42v18" stroke="currentColor" stroke-width="4" stroke-linecap="round" opacity="0.3"/>
             </svg>`
         },
         Airplane: {
-            bg: '#E8FBFB',
+            bg: '#EBFBFF',
             svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M36 10 L40 28 L62 36 L40 44 L36 62 L32 44 L10 36 L32 28 Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
-                <path d="M36 28 V44 M32 36 H40" stroke="currentColor" stroke-width="3" opacity="0.5"/>
+                <path d="M12 42L28 38L32 16C33 14 36 14 37 16L41 36L60 32C62 31.5 64 33 64 35C64 37 62 38.5 60 40L41 44L44 56C44 58 42 60 40 60L38 52L24 58L22 46L12 42Z" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>`
         },
         Phone: {
-            bg: '#FFF8ED',
+            bg: '#FFFBEB',
             svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M20 20 C20 15 25 10 36 10 C47 10 52 15 52 20 C52 35 35 52 20 52 C15 52 10 47 10 36 C10 25 15 20 20 20Z" stroke="currentColor" stroke-width="4"/>
-                <rect x="24" y="24" width="24" height="24" rx="4" stroke="currentColor" stroke-width="3" opacity="0.4"/>
+                <rect x="22" y="10" width="28" height="52" rx="6" stroke="currentColor" stroke-width="4"/>
+                <path d="M26 18h20m-20 8h10" stroke="currentColor" stroke-width="4" stroke-linecap="round" opacity="0.4"/>
+                <circle cx="36" cy="52" r="4" stroke="currentColor" stroke-width="4"/>
+                <path d="M10 28c4-4 8-4 12 0m28 0c4-4 8-4 12 0" stroke="currentColor" stroke-width="4" stroke-linecap="round" opacity="0.3"/>
             </svg>`
         },
         Sun: {
-            bg: '#EAF4FF',
+            bg: '#EFF6FF',
             svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="36" cy="36" r="14" stroke="currentColor" stroke-width="4"/>
-                <line x1="36" y1="8" x2="36" y2="16" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <line x1="36" y1="56" x2="36" y2="64" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <line x1="8" y1="36" x2="16" y2="36" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-                <line x1="56" y1="36" x2="64" y2="36" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M36 12v6m0 36v6M12 36h6m36 0h6m-39.6-17.1l4.2 4.2m26.8 26.8l4.2 4.2m-35.2 0l4.2-4.2m26.8-26.8l4.2-4.2" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
             </svg>`
         },
         Wristwatch: {
-            bg: '#FFF3E8',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="30" y="8" width="12" height="56" rx="4" stroke="currentColor" stroke-width="4" opacity="0.3"/>
-                <circle cx="36" cy="36" r="18" fill="white" stroke="currentColor" stroke-width="4"/>
-                <path d="M36 36 L36 26 M36 36 L44 36" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-            </svg>`
-        },
-        "Paint Palette": {
-            bg: '#FFF0EE',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 36 C12 20 25 10 36 10 C47 10 60 20 60 36 C60 52 47 62 36 62 C25 62 12 52 12 36Z" stroke="currentColor" stroke-width="4"/>
-                <circle cx="25" cy="28" r="4" fill="currentColor"/>
-                <circle cx="47" cy="28" r="4" fill="currentColor" opacity="0.6"/>
-                <circle cx="36" cy="48" r="4" fill="currentColor" opacity="0.3"/>
-            </svg>`
-        },
-        Book: {
-            bg: '#F0EDFF',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="15" y="10" width="42" height="52" rx="4" stroke="currentColor" stroke-width="4"/>
-                <line x1="25" y1="10" x2="25" y2="62" stroke="currentColor" stroke-width="4"/>
-            </svg>`
-        },
-        Clock: {
-            bg: '#F0FDF4',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="36" cy="36" r="28" stroke="currentColor" stroke-width="4"/>
-                <path d="M36 36 L36 20 M36 36 L50 36" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
-            </svg>`
-        },
-        Trophy: {
-            bg: '#FEFCE8',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M20 15 H52 L48 45 C46 52 40 55 36 55 C32 55 26 52 24 45 Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
-                <path d="M20 25 H15 V35 H20 M52 25 H57 V35 H52" stroke="currentColor" stroke-width="4"/>
-                <path d="M30 65 H42 M36 55 V65" stroke="currentColor" stroke-width="4"/>
-            </svg>`
-        },
-        Radio: {
-            bg: '#FDF2F8',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="10" y="25" width="52" height="35" rx="6" stroke="currentColor" stroke-width="4"/>
-                <circle cx="28" cy="42" r="8" stroke="currentColor" stroke-width="3" opacity="0.5"/>
-                <circle cx="48" cy="42" r="5" fill="currentColor"/>
-                <path d="M20 15 L25 25" stroke="currentColor" stroke-width="4"/>
-            </svg>`
-        },
-        Camera: {
-            bg: '#EAF4FF',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="10" y="20" width="52" height="38" rx="6" stroke="currentColor" stroke-width="4"/>
-                <circle cx="36" cy="39" r="10" stroke="currentColor" stroke-width="4"/>
-                <rect x="20" y="14" width="12" height="6" fill="currentColor"/>
-            </svg>`
-        },
-        Gift: {
-            bg: '#FFF0EE',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="14" y="24" width="44" height="36" rx="4" stroke="currentColor" stroke-width="4"/>
-                <rect x="12" y="18" width="48" height="8" rx="2" fill="currentColor"/>
-                <path d="M36 18 V60 M14 42 H58" stroke="currentColor" stroke-width="2" opacity="0.5"/>
-            </svg>`
-        },
-        Umbrella: {
-            bg: '#FDF2F8',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10 36 C10 22 21 10 36 10 C51 10 62 22 62 36 H10Z" stroke="currentColor" stroke-width="4"/>
-                <path d="M36 36 V56 C36 61 30 61 30 56" stroke="currentColor" stroke-width="4" fill="none"/>
-            </svg>`
-        },
-        Statue: {
-            bg: '#F3F4F6',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="36" cy="22" r="10" stroke="currentColor" stroke-width="4"/>
-                <path d="M20 60 L24 35 H48 L52 60 H20Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
-            </svg>`
-        },
-        Lamp: {
-            bg: '#FEFCE8',
-            svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M24 52 H48 L40 24 H32 Z" stroke="currentColor" stroke-width="4"/>
-                <path d="M36 52 V65 M28 65 H44" stroke="currentColor" stroke-width="4"/>
-            </svg>`
-        },
-        Vase: {
             bg: '#FFF7ED',
             svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M36 10 C28 10 22 18 22 28 C22 45 30 62 36 62 C42 62 50 45 50 28 C50 18 44 10 36 10Z" stroke="currentColor" stroke-width="4"/>
+                <circle cx="36" cy="36" r="18" stroke="currentColor" stroke-width="4"/>
+                <path d="M24 22c0-8 4-12 12-12s12 4 12 12m-24 28c0 8 4 12 12 12s12-4 12-12" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M36 36l6-6m-6 6v-10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
             </svg>`
         },
-        Ring: {
-            bg: '#F0F9FF',
+        Palette: {
+            bg: '#FDF2F2',
             svg: `<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="36" cy="42" r="18" stroke="currentColor" stroke-width="6"/>
-                <path d="M36 24 L42 12 L36 4 L30 12 Z" fill="currentColor"/>
+                <path d="M60 36c0 13.3-10.7 24-24 24s-24-10.7-24-24 10.7-24 24-24 24 10.7 24 24z" stroke="currentColor" stroke-width="4"/>
+                <circle cx="28" cy="28" r="4" fill="currentColor"/>
+                <circle cx="44" cy="28" r="4" fill="currentColor" opacity="0.7"/>
+                <circle cx="44" cy="44" r="4" fill="currentColor" opacity="0.5"/>
+                <circle cx="28" cy="44" r="4" fill="currentColor" opacity="0.3"/>
+                <path d="M30 60c0-4.4 3.6-8 8-8s8 3.6 8 8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
             </svg>`
         }
     };
@@ -563,21 +502,117 @@ document.addEventListener('DOMContentLoaded', () => {
     function getRoomTheme(level) {
         const index = Math.floor((level - 1) / 50);
         const themes = [
-            'transparent', // Default
-            'linear-gradient(135deg, rgba(26,26,46,0.8) 0%, rgba(22,33,62,0.8) 100%)', // Midnight
-            'linear-gradient(135deg, rgba(75,108,183,0.8) 0%, rgba(24,40,72,0.8) 100%)', // Ocean
-            'linear-gradient(135deg, rgba(15,32,39,0.8) 0%, rgba(44,83,100,0.8) 100%)', // Emerald
-            'linear-gradient(135deg, rgba(55,59,68,0.8) 0%, rgba(66,134,244,0.8) 100%)', // Electric
-            'linear-gradient(135deg, rgba(131,58,180,0.8) 0%, rgba(253,29,29,0.8) 100%)' // Sunset
+            '#f8fafc', // Default Slate 50
+            'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', // Midnight
+            'linear-gradient(135deg, #4b6cb7 0%, #182848 100%)', // Ocean
+            'linear-gradient(135deg, #0f2027 0%, #2c5364 100%)', // Emerald
+            'linear-gradient(135deg, #373b44 0%, #4286f4 100%)', // Electric
+            'linear-gradient(135deg, #833ab4 0%, #fd1d1d 100%)' // Sunset
         ];
         return themes[index] || themes[0];
+    }
+
+    function initMemoryLobby() {
+        const memData = state.memory;
+        state.currentStage = 'lobby';
+        mainContent.innerHTML = `
+            ${gameToolbar('Room Observer')}
+            <div class="view ro-root ro-lobby-container" style="background: ${getRoomTheme(memData.level)}; border-radius: 0;">
+                <header class="ro-header">
+                    <h2 class="ro-title">Room Observer</h2>
+                    <p>Sharp eyes, steady mind. Master your spatial memory.</p>
+                </header>
+
+                <div class="memory-stats-bar" style="justify-content: center; gap: 2rem; margin-top: 1rem;">
+                    <div class="stat-item">
+                        <span class="stat-label">HIGH SCORE</span>
+                        <div class="stat-value">🏆 ${memData.highScore}</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">LEVEL</span>
+                        <div class="stat-value">📈 ${memData.level}</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">STARS</span>
+                        <div class="stat-value">⭐ ${state.stars || 0}</div>
+                    </div>
+                </div>
+
+                <div class="ro-shop-grid">
+                    <div class="ro-shop-card">
+                        <div class="ro-shop-icon">⏳</div>
+                        <h3>Time Boost</h3>
+                        <p>Adds 5 seconds to your observation time.</p>
+                        <div class="ro-shop-price">100 🪙</div>
+                        <button class="btn-cta buy-btn" data-item="time">+5s Time</button>
+                    </div>
+                    <div class="ro-shop-card">
+                        <div class="ro-shop-icon">🛡️</div>
+                        <h3>Safety Net</h3>
+                        <p>Allows 1 wrong answer without penalty.</p>
+                        <div class="ro-shop-price">250 🪙</div>
+                        <button class="btn-cta buy-btn" data-item="shield">Buy Shield</button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 3rem;">
+                <button class="btn-cta" id="start-memory-game" style="padding: 1rem 3rem; font-size: 1.2rem; width: auto;">
+                    PLAY LEVEL ${memData.level} ▶
+                </button>
+            </div>
+            </div>
+        `;
+
+        attachToolbarListeners();
+
+        document.getElementById('start-memory-game').onclick = () => initMemoryGame();
+
+        document.querySelectorAll('.buy-btn').forEach(btn => {
+            btn.onclick = () => {
+                const item = btn.getAttribute('data-item');
+                const cost = item === 'time' ? 100 : 250;
+                if (state.coins >= cost) {
+                    state.coins -= cost;
+                    memData.activeBoosts = memData.activeBoosts || [];
+                    memData.activeBoosts.push(item);
+                    btn.disabled = true;
+                    btn.innerText = '✅ Active';
+                    updateNavStats();
+                    DB.save(state);
+                    showToast(`${item === 'time' ? 'Time Boost' : 'Shield'} activated!`);
+                } else {
+                    showToast('Not enough coins! 🪙');
+                }
+            };
+        });
+
+        gsap.from('.ro-shop-card', { opacity: 0, y: 30, stagger: 0.1, duration: 0.8 });
     }
 
     function initMemoryGame() {
         const memData = state.memory;
         let level = memData.level;
-        let objectCount = 5 + Math.floor((level - 1) / 5);
-        let timerSeconds = 10 + Math.floor((level - 1) / 5) * 2;
+        state.currentStage = 'playing';
+
+        // Dynamic difficulty: Base 5 objects, 10 seconds.
+        // Every 5 levels: +1 object, +2 seconds.
+        const difficultyStep = Math.floor((level - 1) / 5);
+        let objectCount = Math.min(12, 5 + difficultyStep); // Max 12 objects
+        let timerSeconds = 10 + (difficultyStep * 2);
+
+        // Level 300: Grand Level
+        const isGrandLevel = level === 300;
+        if (isGrandLevel) {
+            objectCount = 12; // Maximum challenge
+            timerSeconds = 30; // More time for the final madness
+        }
+
+        // Setup boosters
+        const activeBoosts = memData.activeBoosts || [];
+        let extraSeconds = activeBoosts.includes('time') ? 5 : 0;
+        memData.activeBoosts = []; // Clear for next run
+
+        timerSeconds += extraSeconds;
         const totalTime = timerSeconds;
 
         const colorNames = Object.keys(COLOR_HEX);
@@ -592,29 +627,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         mainContent.innerHTML = `
             ${gameToolbar('Room Observer')}
-            <div class="view game-container ro-root" style="background: ${getRoomTheme(level)}; transition: background 0.5s ease; border-radius: 24px;">
-                <!-- Header -->
-                <div class="ro-header">
-                    <div class="level-badge">Level ${level} / 300</div>
-                    <h2 class="ro-title">Room Observer</h2>
-                    <div class="memory-stats-bar">
-                        <span>🏆 ${memData.highScore} pts</span>
-                        <span>⭐ ${state.stars || 0} stars</span>
-                        <span>🎮 ${memData.gamesPlayed} played</span>
-                    </div>
+            <div class="view game-container ro-root" style="background: ${getRoomTheme(level)}; border-radius: 0;">
+                <div class="ro-header" style="text-align: left; padding: 0 1rem;">
+                    <div style="color: ${level % 50 === 0 ? 'var(--golden-yellow)' : 'white'}; font-weight: 800; font-size: 1.5rem;">${isGrandLevel ? '🏆 GRAND LEVEL' : 'Level ' + level}</div>
+                    <div style="color: white; opacity: 0.8; font-size: 1rem;">${isGrandLevel ? 'The Ultimate Memory Challenge' : 'Memorize ' + objectCount + ' items'}</div>
                 </div>
 
                 <div class="ro-timer-capsule" id="timer-capsule">
+                    <span class="ro-shop-icon" style="font-size: 1.5rem;">⏱️</span>
                     <span id="game-timer" class="ro-timer-text">${timerSeconds}s</span>
                 </div>
-
-                ${state.coins >= 100 ? `
-                    <div style="text-align:center; margin-bottom:1rem;">
-                        <button class="btn-cta" id="buy-extra-time" style="padding: 5px 15px; font-size: 0.8rem;">
-                            ⏳ Buy +5s (100 🪙)
-                        </button>
-                    </div>
-                ` : ''}
 
                 <div class="ro-progress-bar">
                     <div class="ro-progress-fill" id="timer-progress"></div>
@@ -622,13 +644,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 <div id="observation-room" class="ro-card-grid">
                     ${roomObjects.map(obj => {
-            const data = OBJECT_DATA[obj.name] || OBJECT_DATA['Flower'];
-            const hex = COLOR_HEX[obj.color] || '#888';
+            const data = OBJECT_DATA[obj.name];
+            const hex = COLOR_HEX[obj.color];
+            const isLight = ['White', 'Yellow', 'Beige'].includes(obj.color);
+            const iconStyle = isLight ? 'filter: drop-shadow(0 0 2px rgba(0,0,0,0.3)) brightness(0.9);' : '';
             return `
-                        <div class="ro-icon-card" style="background: ${data.bg}; color: ${hex};">
-                            <div class="ro-icon-wrap">${data.svg}</div>
-                            <div class="ro-label-pill">${obj.name}</div>
-                        </div>`;
+                            <div class="ro-icon-card" style="background: ${data.bg}; color: ${hex};">
+                                <div class="ro-icon-wrap" style="${iconStyle}">${data.svg}</div>
+                                <div class="ro-label-pill">${obj.name}</div>
+                            </div>`;
         }).join('')}
                 </div>
 
@@ -647,39 +671,30 @@ document.addEventListener('DOMContentLoaded', () => {
         memData.gamesPlayed++;
         DB.save(state);
 
-        let buyBtn = document.getElementById('buy-extra-time');
-        if (buyBtn) {
-            buyBtn.onclick = () => {
-                if (state.coins >= 100) {
-                    state.coins -= 100;
-                    timerSeconds += 5;
-                    const timerEl = document.getElementById('game-timer');
-                    if (timerEl) timerEl.innerText = `${timerSeconds}s`;
-                    buyBtn.disabled = true;
-                    buyBtn.innerText = '✅ Added';
-                    updateNavStats();
-                    DB.save(state);
-                }
-            };
-        }
-
         const progressEl = document.getElementById('timer-progress');
-        const interval = setInterval(() => {
+        state.activeInterval = setInterval(() => {
             timerSeconds--;
             const timerEl = document.getElementById('game-timer');
             if (timerEl) timerEl.innerText = `${timerSeconds}s`;
             if (progressEl) progressEl.style.width = `${(timerSeconds / totalTime) * 100}%`;
-            if (timerSeconds <= 3 && timerSeconds > 0) {
-                document.getElementById('timer-capsule')?.classList.add('urgent');
-            }
+
             if (timerSeconds <= 0) {
-                clearInterval(interval);
-                showMemoryQuestions(roomObjects, level);
+                clearInterval(state.activeInterval);
+                showMemoryQuestions(roomObjects, level, activeBoosts);
             }
         }, 1000);
+
+        gsap.from('.ro-icon-card', {
+            scale: 0.5,
+            opacity: 0,
+            y: 50,
+            stagger: 0.08,
+            duration: 0.6,
+            ease: "back.out(1.7)"
+        });
     }
 
-    function showMemoryQuestions(roomObjects, level) {
+    function showMemoryQuestions(roomObjects, level, activeBoosts) {
         const observationRoom = document.getElementById('observation-room');
         const controls = document.getElementById('game-controls');
         const qText = document.getElementById('question-text');
@@ -690,54 +705,68 @@ document.addEventListener('DOMContentLoaded', () => {
         if (observationRoom) observationRoom.classList.add('hidden');
         const timerCapsule = document.getElementById('timer-capsule');
         const progressBar = document.getElementById('timer-progress')?.parentElement;
-        const buyBtn = document.getElementById('buy-extra-time');
         if (timerCapsule) timerCapsule.style.display = 'none';
         if (progressBar) progressBar.style.display = 'none';
-        if (buyBtn) buyBtn.style.display = 'none';
         if (controls) controls.classList.remove('hidden');
 
-        let currentQ = 0, score = 0;
-        const totalQs = roomObjects.length;
-        const colorNames = Object.keys(COLOR_HEX);
+        let currentQIdx = 0, score = 0;
+        let hasShield = activeBoosts.includes('shield');
+
+        // Randomize question sequence — each object once
+        const questionSequence = [...roomObjects].sort(() => Math.random() - 0.5);
+        const totalQs = questionSequence.length;
 
         const ask = () => {
-            const randomObj = roomObjects[Math.floor(Math.random() * roomObjects.length)];
-            const objData = OBJECT_DATA[randomObj.name] || OBJECT_DATA['Flower'];
+            const currentObj = questionSequence[currentQIdx];
+            const objData = OBJECT_DATA[currentObj.name];
 
             if (qIconBg) qIconBg.innerHTML = objData.svg;
-            qText.innerHTML = `What color was the <span class="ro-highlight">${randomObj.name}</span>?`;
-            if (qProgress) qProgress.textContent = `Progress: ${currentQ + 1} / ${totalQs}`;
+            qText.innerHTML = `What color was the <span class="ro-highlight">${currentObj.name}</span>?`;
+            if (qProgress) qProgress.textContent = `Question ${currentQIdx + 1} / ${totalQs}`;
 
             ansBtns.innerHTML = '';
-            const pool = [...new Set([randomObj.color, ...colorNames])].slice(0, 4);
-            pool.sort(() => Math.random() - 0.5).forEach(opt => {
-                const hex = COLOR_HEX[opt] || '#888';
+
+            // Generate pool of 4 options (correct + 3 random)
+            const colorNames = Object.keys(COLOR_HEX);
+            const distractors = colorNames.filter(c => c !== currentObj.color).sort(() => Math.random() - 0.5).slice(0, 3);
+            const pool = [currentObj.color, ...distractors].sort(() => Math.random() - 0.5);
+
+            pool.forEach(opt => {
+                const hex = COLOR_HEX[opt];
                 const btn = document.createElement('button');
                 btn.className = 'ro-answer-btn';
                 btn.innerHTML = `<span class="ro-answer-dot" style="background:${hex};"></span>${opt}`;
                 btn.addEventListener('click', () => {
-                    const correct = opt === randomObj.color;
+                    const correct = opt === currentObj.color;
                     if (correct) {
                         score++;
-                        // state.stars = (state.stars || 0) + 1; // Stars are now awarded at the end
                         btn.classList.add('correct');
                     } else {
-                        btn.classList.add('wrong');
-                        ansBtns.querySelectorAll('.ro-answer-btn').forEach(b => {
-                            if (b.textContent.trim() === randomObj.color) b.classList.add('correct');
-                        });
+                        if (hasShield) {
+                            hasShield = false;
+                            score++; // Grant point as shield usage
+                            btn.classList.add('correct');
+                            showToast('🛡️ Shield protected you!');
+                        } else {
+                            btn.classList.add('wrong');
+                            ansBtns.querySelectorAll('.ro-answer-btn').forEach(b => {
+                                if (b.textContent.trim() === currentObj.color) b.classList.add('correct');
+                            });
+                        }
                     }
+
                     ansBtns.querySelectorAll('.ro-answer-btn').forEach(b => b.disabled = true);
-                    currentQ++;
-                    updateNavStats();
-                    DB.save(state);
+                    currentQIdx++;
+
                     setTimeout(() => {
-                        if (currentQ < totalQs) ask();
+                        if (currentQIdx < totalQs) ask();
                         else finishMemoryLevel(score, totalQs, level);
                     }, 800);
                 });
                 ansBtns.appendChild(btn);
             });
+
+            gsap.from('.ro-answer-btn', { opacity: 0, x: -20, stagger: 0.05, duration: 0.4 });
         };
         ask();
     }
@@ -748,17 +777,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const points = score * 10 * level;
 
         let starsEarned = 0;
-        if (score === totalQs) starsEarned = 3;
-        else if (score >= Math.ceil(totalQs * 0.8)) starsEarned = 2;
-        else if (score >= Math.ceil(totalQs * 0.6)) starsEarned = 1;
+        if (score >= 5) starsEarned = 3;
+        else if (score === 4) starsEarned = 2;
+        else if (score === 3) starsEarned = 1;
 
         let coinsEarned = 0;
         if (success) {
             state.stars = (state.stars || 0) + starsEarned;
-            if (!memData.hasFailedCurrent) {
+
+            // 1 coin every 2 games played
+            if (memData.gamesPlayed % 2 === 0) {
                 coinsEarned = 1;
                 state.coins += coinsEarned;
             }
+
             memData.level = Math.min(300, level + 1);
             memData.levelsCompleted++;
             memData.hasFailedCurrent = false; // Reset for next level
@@ -1225,6 +1257,7 @@ document.addEventListener('DOMContentLoaded', () => {
        ============================================= */
     function initConfusionGame() {
         const confData = state.confusion;
+        state.currentStage = 'lobby';
         mainContent.innerHTML = `
             ${gameToolbar('Color Confusion')}
             <div class="view game-container" style="background: white;">
@@ -1283,6 +1316,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.startConfusionMode = function (mode) {
         const confData = state.confusion;
+        state.currentStage = 'playing';
         confData.gamesPlayed++;
         DB.save(state);
 
@@ -1320,24 +1354,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const metaValue = document.getElementById('conf-meta-value');
         const pointsEl = document.getElementById('conf-points');
 
-        const timerInt = setInterval(() => {
+        state.activeInterval = setInterval(() => {
             if (mode === 'survival') {
                 timeLeft = Math.max(0, timeLeft - 0.1);
                 if (metaValue) metaValue.innerText = timeLeft.toFixed(1) + 's';
                 if (timeLeft <= 0) {
-                    clearInterval(timerInt);
+                    clearInterval(state.activeInterval);
                     finishRefinedConfusion({ mode, score, totalPoints, reactions, maxCombo, startTime });
                 }
             } else if (mode === 'speed') {
                 if (metaValue) metaValue.innerText = (target - score);
                 if (score >= target) {
-                    clearInterval(timerInt);
+                    clearInterval(state.activeInterval);
                     finishRefinedConfusion({ mode, score, totalPoints, reactions, maxCombo, startTime });
                 }
             } else {
                 if (metaValue) metaValue.innerText = lives;
                 if (lives <= 0) {
-                    clearInterval(timerInt);
+                    clearInterval(state.activeInterval);
                     finishRefinedConfusion({ mode, score, totalPoints, reactions, maxCombo, startTime });
                 }
             }
@@ -1363,8 +1397,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             questionStartTime = Date.now();
-            let options = [fontColorName];
-            const distractors = WORD_LIST.filter(c => c !== fontColorName && c !== textColorName);
+            let options = [fontColorName, textColorName]; // Always include the word itself as a distractor
+            const distractors = WORD_LIST.filter(c => !options.includes(c));
             while (options.length < 4) {
                 const rand = distractors[Math.floor(Math.random() * distractors.length)];
                 if (!options.includes(rand)) options.push(rand);
