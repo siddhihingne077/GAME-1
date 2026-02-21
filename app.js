@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (view === 'home') {
-            location.reload();
+            goBack();
         } else if (view === 'about') {
             renderAbout();
         } else if (view === 'help') {
@@ -187,17 +187,112 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function goHome() {
-        location.reload();
-    }
-
     function goBack() {
-        // Returns to home tab selection (game lobby)
-        location.reload();
+        // Returns to home tab selection (game lobby) without page reload
+        state.currentGame = null;
+        state.currentView = 'home';
+
+        // Reset nav active states
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.classList.toggle('active', item.getAttribute('data-view') === 'home');
+        });
+
+        // Re-render the home view
+        mainContent.innerHTML = `
+            <section id="home-view" class="view">
+                <header class="hero" style="text-align: center; margin-bottom: 2rem;">
+                    <h2 class="sub-greeting">Mastering the Mind</h2>
+                    <p>Select your challenge and reach new heights.</p>
+                </header>
+                <div class="mode-cards-row">
+                    <button class="mode-card active" data-game="memory">
+                        <div class="mode-card-icon memory-icon">🏠</div>
+                        <div class="mode-card-title">Room Observer</div>
+                        <div class="mode-card-sub">Spatial Memory</div>
+                    </button>
+                    <button class="mode-card" data-game="f1">
+                        <div class="mode-card-icon f1-icon">🏎️</div>
+                        <div class="mode-card-title">F1 Reflex</div>
+                        <div class="mode-card-sub">Reaction Speed</div>
+                    </button>
+                    <button class="mode-card" data-game="schulte">
+                        <div class="mode-card-icon schulte-icon">🔢</div>
+                        <div class="mode-card-title">Schulte Grid</div>
+                        <div class="mode-card-sub">Visual Perception</div>
+                    </button>
+                    <button class="mode-card" data-game="confusion">
+                        <div class="mode-card-icon confusion-icon">🎨</div>
+                        <div class="mode-card-title">Color Confusion</div>
+                        <div class="mode-card-sub">Stroop Effect</div>
+                    </button>
+                </div>
+                <div id="game-display-area" class="game-display-container">
+                    <div class="game-card-expanded active" id="memory-preview">
+                        <div class="preview-visual memory">🏘️</div>
+                        <div class="preview-content">
+                            <h3>Room Observer</h3>
+                            <p>Challenge your spatial memory by observing 5 objects and their colors in just 10 seconds. Perfect for sharpening focus!</p>
+                            <button class="btn-cta play-game-btn" data-game="memory">Play Game</button>
+                        </div>
+                    </div>
+                    <div class="game-card-expanded hidden" id="f1-preview">
+                        <div class="preview-visual f1">🏎️</div>
+                        <div class="preview-content">
+                            <h3>F1 Reflex</h3>
+                            <p>Test your reaction speed against legendary F1 drivers. React as soon as the lights go out. Can you beat Verstappen?</p>
+                            <button class="btn-cta play-game-btn" data-game="f1">Start Racing</button>
+                        </div>
+                    </div>
+                    <div class="game-card-expanded hidden" id="schulte-preview">
+                        <div class="preview-visual schulte">🔢</div>
+                        <div class="preview-content">
+                            <h3>Schulte Grid</h3>
+                            <p>Improve visual perception and peripheral vision. Find the numbers 1 to 25 in ascending order as fast as possible.</p>
+                            <button class="btn-cta play-game-btn" data-game="schulte">Start Finding</button>
+                        </div>
+                    </div>
+                    <div class="game-card-expanded hidden" id="confusion-preview">
+                        <div class="preview-visual confusion">🎨</div>
+                        <div class="preview-content">
+                            <h3>Color Confusion</h3>
+                            <p>Master the Stroop Effect! Quickly identify either the physical color or the written text under intense time pressure.</p>
+                            <button class="btn-cta play-game-btn" data-game="confusion">Start Mixing</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+
+        // Re-attach event listeners for the home view
+        document.querySelectorAll('.mode-card').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const gameId = btn.getAttribute('data-game');
+                document.querySelectorAll('.mode-card').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('.game-card-expanded').forEach(card => {
+                    card.classList.add('hidden');
+                    card.classList.remove('active');
+                });
+                const preview = document.getElementById(`${gameId}-preview`);
+                if (preview) {
+                    preview.classList.remove('hidden');
+                    preview.classList.add('active');
+                }
+            });
+        });
+
+        document.querySelectorAll('.play-game-btn').forEach(btn => {
+            btn.addEventListener('click', () => startGame(btn.getAttribute('data-game')));
+        });
+
+        // Animate the home view in
+        gsap.from('.hero', { opacity: 0, y: 30, duration: 0.6 });
+        gsap.from('.game-card-expanded', { opacity: 0, y: 30, duration: 0.6, delay: 0.15 });
+        updateNavStats();
     }
 
     /* =============================================
-       GAME TOOLBAR — Back & Home buttons injected into every game
+       GAME TOOLBAR — Back button injected into every game
        ============================================= */
     function gameToolbar(gameTitle) {
         return `
@@ -206,18 +301,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span>&#8592;</span> Back
                 </button>
                 <span class="toolbar-title">${gameTitle}</span>
-                <button class="toolbar-btn home-btn" id="btn-home" onclick="">
-                    🏠 Home
-                </button>
             </div>
         `;
     }
 
     function attachToolbarListeners() {
         const backBtn = document.getElementById('btn-back');
-        const homeBtn = document.getElementById('btn-home');
         if (backBtn) backBtn.addEventListener('click', goBack);
-        if (homeBtn) homeBtn.addEventListener('click', goHome);
     }
 
     /* =============================================
@@ -697,9 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: 'Total Stars', value: `${state.stars || 0} ⭐` }
             ],
             primaryLabel: success ? 'Next Level ▶' : 'Replay Level 🔄',
-            onPrimary: () => initMemoryGame(),
-            secondaryLabel: '🏠 Home',
-            onSecondary: () => goHome()
+            onPrimary: () => initMemoryGame()
         });
     }
 
@@ -872,11 +960,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lightInterval) clearInterval(lightInterval);
         }
 
-        // Hook cleanup into the toolbar back/home buttons
+        // Hook cleanup into the toolbar back button
         const backBtn = mainContent.querySelector('.toolbar-back');
-        const homeBtn = mainContent.querySelector('.toolbar-home');
         backBtn?.addEventListener('click', cleanupF1Listeners);
-        homeBtn?.addEventListener('click', cleanupF1Listeners);
 
         // Existing button click → calls the same handler
         document.getElementById('start-f1').addEventListener('click', handleStartRace);
@@ -934,7 +1020,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button class="btn-cta" id="race-again-btn" style="width:auto;">
                     🔄 Race Again
                 </button>
-                <button class="btn-outline" onclick="location.reload()">🏠 Home</button>
             </div>
         `;
         document.getElementById('f1-leaderboard').innerHTML = html;
@@ -1029,9 +1114,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: 'Stars', value: '+2 ⭐' }
             ],
             primaryLabel: '🔄 Play Again',
-            onPrimary: () => initSchulteGame(),
-            secondaryLabel: '🏠 Home',
-            onSecondary: () => goHome()
+            onPrimary: () => initSchulteGame()
         });
     }
 
@@ -1061,10 +1144,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         Every level is tuned to promote neuroplasticity, and every game mechanic is backed by cognitive research. 
                         Whether you're chasing a split-second F1 reaction time or levelling up your room-observer memory—Master Mind makes every second count.
                     </p>
-                    <button class="btn-cta" style="margin-top:2rem; width:auto;" onclick="location.reload()">🎮 Play Games</button>
+                    <button class="btn-cta" style="margin-top:2rem; width:auto;" id="about-back-btn">← Back to Games</button>
                 </div>
             </div>
         `;
+        document.getElementById('about-back-btn')?.addEventListener('click', goBack);
     }
 
     function renderHelp() {
@@ -1086,10 +1170,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             <p>25 numbers randomly placed on a 5×5 grid. Click 1, then 2, then 3... all the way to 25 in order — as fast as possible. Use peripheral vision to get ahead!</p>
                         </div>
                     </div>
-                    <button class="btn-cta" style="margin-top:2rem; width:auto;" onclick="location.reload()">🚀 I'm Ready!</button>
+                    <button class="btn-cta" style="margin-top:2rem; width:auto;" id="help-back-btn">← Back to Games</button>
                 </div>
             </div>
         `;
+        document.getElementById('help-back-btn')?.addEventListener('click', goBack);
     }
 
     function renderLeaderboard() {
@@ -1128,10 +1213,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="text-align:center; margin-top:2rem; font-size:1.2rem">
                         🪙 Total Coins: <strong>${state.coins}</strong> &nbsp;|&nbsp; ⭐ Total Stars: <strong>${state.stars}</strong>
                     </div>
-                    <button class="btn-cta" style="margin-top:2rem; width:auto; display:block; margin-left:auto; margin-right:auto;" onclick="location.reload()">🎮 Play</button>
+                    <button class="btn-cta" style="margin-top:2rem; width:auto; display:block; margin-left:auto; margin-right:auto;" id="leaderboard-back-btn">← Back to Games</button>
                 </div>
             </div>
         `;
+        document.getElementById('leaderboard-back-btn')?.addEventListener('click', goBack);
     }
 
     /* =============================================
@@ -1378,9 +1464,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: 'Longest Streak', value: `x${maxCombo}` }
             ],
             primaryLabel: 'Repeat Calibration',
-            onPrimary: () => initConfusionGame(),
-            secondaryLabel: 'Base Home',
-            onSecondary: () => goHome()
+            onPrimary: () => initConfusionGame()
         });
     }
 

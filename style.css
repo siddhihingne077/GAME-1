@@ -135,6 +135,10 @@ h3 {
 }
 
 /* Preview visual colour variants */
+.preview-visual.memory {
+    background: var(--pastel-pink);
+}
+
 .preview-visual.f1 {
     background: var(--pastel-pink);
 }
@@ -145,6 +149,32 @@ h3 {
 
 .preview-visual.confusion {
     background: var(--pastel-orange);
+}
+
+/* ── Room Observer (memory) card — bright display matching F1/Confusion ── */
+#memory-preview {
+    background: var(--white) !important;
+    color: var(--text-dark) !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    opacity: 1 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+#memory-preview h3 {
+    color: var(--bg-purple);
+    font-weight: 800;
+}
+
+#memory-preview p {
+    color: var(--text-dark);
+    opacity: 1;
+}
+
+#memory-preview .btn-cta {
+    background: var(--cta-gradient);
+    color: var(--white);
+    box-shadow: 0 4px 15px rgba(247, 107, 28, 0.4);
 }
 
 /* White card used in About/Help/Auth modal content */
@@ -343,7 +373,6 @@ h3 {
     align-items: center;
     color: var(--text-dark);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-    animation: slideUp 0.6s ease-out;
 }
 
 @keyframes slideUp {
@@ -2146,8 +2175,8 @@ kbd {
 }
 
 /* Game toolbar contrast fix for white backgrounds */
-.game-container[style*="background: white"] ~ .game-toolbar,
-.game-container + .game-toolbar {
+.game-container[style*="background: white"]~.game-toolbar,
+.game-container+.game-toolbar {
     background: rgba(0, 0, 0, 0.05);
     border-color: rgba(0, 0, 0, 0.08);
 }
