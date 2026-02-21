@@ -1068,25 +1068,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderHelp() {
+        const games = [
+            {
+                icon: '🏠', title: 'Room Observer', tag: 'Spatial Memory',
+                colorClass: 'memory',
+                tips: [
+                    'Observe 5 objects and their colors carefully.',
+                    'You have limited time (10 seconds) to memorize them.',
+                    'After observation, answer questions about object positions and colors.',
+                    'Correct answers increase your score and memory accuracy.'
+                ]
+            },
+            {
+                icon: '🏎️', title: 'F1 Reflex', tag: 'Reaction Speed',
+                colorClass: 'f1',
+                tips: [
+                    'Click or react as quickly as possible when the signal appears.',
+                    'Do not click before the signal — that\'s a false start!',
+                    'Faster reaction time gives higher points.',
+                ]
+            },
+            {
+                icon: '🔢', title: 'Schulte Grid', tag: 'Visual Perception',
+                colorClass: 'schulte',
+                tips: [
+                    'Find numbers in ascending order as fast as possible.',
+                    'Focus your vision without moving your eyes too much.',
+                    'Speed and accuracy determine your performance.',
+                ]
+            },
+            {
+                icon: '🎨', title: 'Color Confusion', tag: 'Stroop Effect',
+                colorClass: 'confusion',
+                tips: [
+                    'Identify the correct color of the word shown.',
+                    'Ignore the written text and focus on the color displayed.',
+                    'Tests attention and cognitive control.',
+                ]
+            }
+        ];
+
         mainContent.innerHTML = `
-            <div class="view">
-                <div class="game-overlay glass" style="text-align:left; max-width:800px;">
-                    <h2 style="font-size:3rem; margin-bottom:2rem;">How to <span class="highlight-yellow">Play</span></h2>
-                    <div style="display:grid; gap:2rem;">
-                        <div class="help-item">
-                            <h3>🏘️ Room Observer</h3>
-                            <p>Memorize objects and their colors in 10 seconds. Answer at least 3 questions correctly to clear the level and earn a coin. Get all 5 correct for 3 stars!</p>
+            <div class="view help-section">
+                <div class="help-header">
+                    <h2 class="help-title">How to <span class="highlight-yellow">Play</span></h2>
+                    <p class="help-subtitle">Learn the rules and sharpen your mind before starting.</p>
+                </div>
+                <div class="help-cards-list">
+                    ${games.map((g, i) => `
+                        <div class="help-card help-card--${g.colorClass}" style="animation-delay: ${i * 0.1}s">
+                            <div class="help-card-icon help-card-icon--${g.colorClass}">${g.icon}</div>
+                            <div class="help-card-body">
+                                <h3>${g.title} <span class="help-tag">${g.tag}</span></h3>
+                                <ul>
+                                    ${g.tips.map(t => `<li>${t}</li>`).join('')}
+                                </ul>
+                            </div>
                         </div>
-                        <div class="help-item">
-                            <h3>🏎️ F1 Reflex</h3>
-                            <p>Watch 5 red lights turn on one by one. When all lights go out — react instantly by clicking <strong>REACT!</strong>. Below 200ms is world-class. Beat Verstappen!</p>
-                        </div>
-                        <div class="help-item">
-                            <h3>🔢 Schulte Grid</h3>
-                            <p>25 numbers randomly placed on a 5×5 grid. Click 1, then 2, then 3... all the way to 25 in order — as fast as possible. Use peripheral vision to get ahead!</p>
-                        </div>
-                    </div>
-                    <button class="btn-cta" style="margin-top:2rem; width:auto;" onclick="location.reload()">🚀 I'm Ready!</button>
+                    `).join('')}
+                </div>
+                <div style="text-align:center; margin-top:2.5rem;">
+                    <button class="btn-cta" style="width:auto; padding:15px 50px;" onclick="location.reload()">🎮 Start Playing</button>
                 </div>
             </div>
         `;
