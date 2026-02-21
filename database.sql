@@ -15,9 +15,10 @@ CREATE TABLE IF NOT EXISTS game_progress (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     game_type VARCHAR(50) NOT NULL,
-    -- 'memory', 'f1', 'schulte'
-    current_level INTEGER DEFAULT 1,
-    best_score FLOAT DEFAULT 0.0,
+    -- 'memory', 'f1', 'schulte', 'confusion'
+    score FLOAT DEFAULT 0.0,
+    level INTEGER DEFAULT 1,
+    extra_data TEXT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 -- Create Rewards Table

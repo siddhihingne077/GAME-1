@@ -77,7 +77,7 @@ def save_progress():
     stars_gained = data.get('stars_gained', 0)
     extra_data = data.get('extra_data', {})
 
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({"status": "error", "message": "User not found"}), 404
 

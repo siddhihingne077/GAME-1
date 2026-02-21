@@ -3,6 +3,7 @@ import sys
 import webbrowser
 import os
 import time
+from pathlib import Path
 
 def run_app():
     print("🚀 Starting Memory Master Platform...")
@@ -24,9 +25,10 @@ def run_app():
     time.sleep(2)
 
     # 4. Open the frontend in the browser
-    frontend_path = os.path.abspath("index.html")
+    frontend_path = Path("index.html").resolve()
+    frontend_url = frontend_path.as_uri()
     print(f"🌐 Opening Frontend: {frontend_path}")
-    webbrowser.open(f"file://{frontend_path}")
+    webbrowser.open(frontend_url)
 
     print("\n✅ Platform is running!")
     print("Press Ctrl+C in this terminal to stop the backend.")

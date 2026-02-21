@@ -1,10 +1,5 @@
 flask
 flask-sqlalchemy
 flask-cors
-psycopg2-binary
-mysql-connector-python
 python-dotenv
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
 requests
