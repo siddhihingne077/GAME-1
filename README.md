@@ -36,22 +36,19 @@ A premium gaming platform designed to sharpen your memory and reflexes.
    pip install -r requirements.txt
    ```
 
-3. Run the backend:
+3. Run the platform:
    ```bash
-   python backend/app.py
+   python run.py
    ```
-
-4. Open `frontend/index.html` in your browser.
 
 ## Project Structure
 
 ```text
-├── backend/
-│   └── app.py          # Flask API and Models
-├── frontend/
-│   ├── index.html      # Main entry point
-│   ├── style.css       # Core design system
-│   └── app.js          # SPA Logic & Games
+├── app.py              # Flask API and Models
+├── index.html          # Main entry point
+├── style.css           # Core design system
+├── app.js              # SPA Logic & Games
+├── run.py              # Automation script
 ├── requirements.txt    # Python dependencies
 └── README.md           # Documentation
 ```

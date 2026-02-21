@@ -16,7 +16,7 @@ def run_app():
         return
 
     # 2. Run Backend in a separate process
-    backend_path = os.path.join("backend", "app.py")
+    backend_path = "app.py"
     print(f"🖥️ Starting Flask Backend ({backend_path})...")
     backend_process = subprocess.Popen([sys.executable, backend_path])
 
@@ -24,7 +24,7 @@ def run_app():
     time.sleep(2)
 
     # 4. Open the frontend in the browser
-    frontend_path = os.path.abspath(os.path.join("frontend", "index.html"))
+    frontend_path = os.path.abspath("index.html")
     print(f"🌐 Opening Frontend: {frontend_path}")
     webbrowser.open(f"file://{frontend_path}")
 

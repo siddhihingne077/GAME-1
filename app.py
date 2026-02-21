@@ -134,9 +134,80 @@ def get_leaderboard(game_type):
 
     return jsonify(leaderboard)
 
+# ── Color Confusion API Endpoints ─────────────────────────────
+# Uses the Python confusion_engine for Stroop question generation and validation
+
+try:
+    from confusion_engine import ConfusionEngine, GameSession
+    _confusion_available = True
+except ImportError:
+    _confusion_available = False
+
+# Active game sessions stored in memory (keyed by user_id or session token)
+_active_sessions = {}
+
+@app.route('/api/confusion/generate', methods=['POST'])
+def confusion_generate():
+    """Generate a Stroop effect question for the Color Confusion game."""
+    if not _confusion_available:
+        return jsonify({"status": "error", "message": "Confusion engine not available"}), 500
+    
+    data = request.json or {}
+    difficulty = data.get('difficulty', 1)
+    mode = data.get('mode', 'endless')
+    session_id = data.get('session_id', 'default')
+    
+    # Create or retrieve session
+    if session_id not in _active_sessions or not _active_sessions[session_id].is_active:
+        _active_sessions[session_id] = GameSession(mode)
+    
+    session = _active_sessions[session_id]
+    question = session.next_question()
+    
+    if question is None:
+        report = session.get_final_report()
+        return jsonify({"status": "finished", "report": report})
+    
+    return jsonify({
+        "status": "success",
+        "question": {
+            "text_word": question.text_word,
+            "font_color_name": question.font_color_name,
+            "font_color_hex": question.font_color_hex,
+            "options": question.options,
+            "difficulty": question.difficulty
+        }
+    })
+
+@app.route('/api/confusion/validate', methods=['POST'])
+def confusion_validate():
+    """Validate a player's answer for the Color Confusion game."""
+    if not _confusion_available:
+        return jsonify({"status": "error", "message": "Confusion engine not available"}), 500
+    
+    data = request.json or {}
+    session_id = data.get('session_id', 'default')
+    selected_color = data.get('selected_color', '')
+    reaction_time_ms = data.get('reaction_time_ms', 2000)
+    
+    if session_id not in _active_sessions:
+        return jsonify({"status": "error", "message": "No active session"}), 404
+    
+    session = _active_sessions[session_id]
+    result = session.submit_answer(selected_color, reaction_time_ms)
+    
+    # If game is over, include the final report
+    if not result.get('is_active', True):
+        result['report'] = session.get_final_report()
+        # Cleanup session
+        del _active_sessions[session_id]
+    
+    return jsonify({"status": "success", **result})
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     # Port is set to 5000 by default or via env
     port = int(os.getenv("PORT", 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
+

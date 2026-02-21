@@ -2023,6 +2023,37 @@ kbd {
     margin: 0.5rem 0;
 }
 
+/* =============================================
+   GAME CONTAINER — Centering for all games
+   ============================================= */
+.game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 60vh;
+    padding-bottom: 4rem;
+}
+
+/* Color Confusion specific centering */
+.game-container[style*="background: white"] {
+    background: #fafbfc !important;
+}
+
+.game-container[style*="background: white"] .stroop-central-card {
+    margin: 1rem auto 0;
+}
+
+.game-container[style*="background: white"] .conf-answer-grid {
+    margin: 1.5rem auto 0;
+}
+
+/* Game toolbar contrast fix for white backgrounds */
+.game-container[style*="background: white"] ~ .game-toolbar,
+.game-container + .game-toolbar {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .dashboard-stats {
