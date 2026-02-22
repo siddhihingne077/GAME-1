@@ -1007,7 +1007,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const isNewBest = f1Data.bestTime === null || time < f1Data.bestTime;
         if (isNewBest) f1Data.bestTime = time;
 
-        state.coins += 20;
         DB.save(state);
         updateNavStats();
 
@@ -1125,9 +1124,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function finishSchulte(elapsed) {
         const schData = state.schulte;
+        const prevBest = schData.bestTime;
         const isNewBest = schData.bestTime === null || elapsed < schData.bestTime;
         if (isNewBest) schData.bestTime = elapsed;
-        state.coins += 30;
         state.stars += 2;
         DB.save(state);
         updateNavStats();
@@ -1137,12 +1136,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         showResultCard({
             icon: isNewBest ? '🏆' : '✅',
-            title: isNewBest ? 'New Record!' : 'Grid Complete!',
+            title: isNewBest ? 'New Record! 🎉' : 'Grid Complete!',
             subtitle: `You finished the Schulte Grid in ${elapsed}s`,
             details: [
                 { label: 'Your Time', value: `${elapsed}s` },
                 { label: 'Best Time', value: `${schData.bestTime}s` },
-                { label: 'Coins', value: '+30 🪙' },
+                { label: 'Previous Best', value: prevBest ? `${prevBest}s` : 'N/A' },
                 { label: 'Stars', value: '+2 ⭐' }
             ],
             primaryLabel: '🔄 Play Again',
