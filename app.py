@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, session, redirect, url_for
+from flask import Flask, jsonify, request, session, redirect, url_for, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 import os
@@ -41,7 +41,7 @@ class GameProgress(db.Model):
 # Routes
 @app.route('/')
 def index():
-    return jsonify({"message": "Memory Master API is running", "version": "1.1.0"})
+    return send_from_directory('.', 'index.html')
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -203,6 +203,11 @@ def confusion_validate():
         del _active_sessions[session_id]
     
     return jsonify({"status": "success", **result})
+
+# Serve static frontend files (CSS, JS, images, etc.)
+@app.route('/<path:filename>')
+def serve_static(filename):
+    return send_from_directory('.', filename)
 
 if __name__ == '__main__':
     with app.app_context():
