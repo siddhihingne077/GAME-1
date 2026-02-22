@@ -2306,6 +2306,175 @@ kbd {
     border-color: rgba(0, 0, 0, 0.08);
 }
 
+/* =============================================
+   SCHULTE GRID — Size Picker Lobby & Game Board
+   ============================================= */
+
+.schulte-size-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.2rem;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0 1rem;
+    align-items: stretch;
+    /* Ensure all cards in a row have equal height */
+}
+
+.schulte-size-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    padding: 1.6rem 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    color: var(--white);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    font-family: 'Poppins', sans-serif;
+    outline: none;
+    opacity: 1 !important;
+    visibility: visible !important;
+    min-height: 220px;
+    height: 100%;
+    /* Fill the grid area */
+}
+
+.schulte-size-card:hover {
+    background: rgba(255, 255, 255, 0.22);
+    transform: translateY(-5px) scale(1.04);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.schulte-size-card:active {
+    transform: scale(0.97);
+}
+
+.schulte-size-emoji {
+    font-size: 2.4rem;
+    line-height: 1;
+}
+
+.schulte-size-label {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.schulte-size-sub {
+    font-size: 0.75rem;
+    opacity: 0.65;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 600;
+}
+
+.schulte-size-best {
+    margin-top: 0.4rem;
+    font-size: 0.82rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-weight: 600;
+}
+
+.schulte-size-best strong {
+    color: var(--golden-yellow);
+}
+
+/* ── Live game board ── */
+.schulte-grid-container {
+    display: grid;
+    /* grid-template-columns set inline by JS e.g. repeat(5, 1fr) */
+    gap: 0.55rem;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 0 0.5rem;
+}
+
+.schulte-cell {
+    aspect-ratio: 1 / 1;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    color: var(--white);
+    font-size: 1.15rem;
+    font-weight: 700;
+    font-family: 'Poppins', sans-serif;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.schulte-cell:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.08);
+}
+
+.schulte-cell.found {
+    background: rgba(34, 197, 94, 0.35);
+    border-color: #22c55e;
+    color: #bbf7d0;
+    cursor: default;
+    transform: scale(0.96);
+}
+
+.schulte-cell.wrong {
+    background: rgba(239, 68, 68, 0.35);
+    border-color: #ef4444;
+    animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    25% {
+        transform: translateX(-5px);
+    }
+
+    75% {
+        transform: translateX(5px);
+    }
+}
+
+/* Stats bar shown during the game */
+.schulte-stats-bar {
+    display: flex;
+    gap: 1.2rem;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 0.88rem;
+    font-weight: 600;
+    opacity: 0.85;
+    margin-bottom: 0.5rem;
+}
+
+/* Big live timer */
+.timer-display {
+    font-size: 2.6rem;
+    font-weight: 800;
+    font-family: 'Poppins', sans-serif;
+    color: var(--golden-yellow);
+    text-shadow: 0 0 18px rgba(255, 215, 0, 0.45);
+    letter-spacing: 1px;
+    margin: 0.4rem 0 0.8rem;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .dashboard-stats {

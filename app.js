@@ -15,8 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 stars: 0,
                 memory: { level: 1, highScore: 0, gamesPlayed: 0, levelsCompleted: 0, hasFailedCurrent: false },
                 f1: { bestTime: null, gamesPlayed: 0 },
-                schulte: { bestTime: null, gamesPlayed: 0 },
-                confusion: { highScore: 0, gamesPlayed: 0 }
+                schulte: { bestTimes: { '3x3': null, '4x4': null, '5x5': null, '6x6': null }, gamesPlayed: 0 },
+                confusion: { bestScores: { endless: 0, survival: 0, speed: 0 }, gamesPlayed: 0 }
             };
         },
         save(data) {
@@ -197,6 +197,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.currentGame === 'memory' && state.currentStage === 'playing') {
             if (state.activeInterval) clearInterval(state.activeInterval);
             initMemoryLobby();
+            return;
+        }
+        if (state.currentGame === 'schulte' && state.currentStage === 'playing') {
+            if (state.activeInterval) clearInterval(state.activeInterval);
+            initSchulteGame();
             return;
         }
         if (state.currentGame === 'confusion' && state.currentStage === 'playing') {
@@ -1062,26 +1067,103 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* =============================================
        GAME 3: SCHULTE GRID
-       Data: bestTime, gamesPlayed
+       Data: bestTimes (per size), gamesPlayed
        ============================================= */
+
+    // Migrate old flat bestTime to new bestTimes object
+    (function migrateSchulteState() {
+        const s = state.schulte;
+        if (!s.bestTimes) {
+            s.bestTimes = { '3x3': null, '4x4': null, '5x5': null, '6x6': null };
+            if (s.bestTime != null) s.bestTimes['5x5'] = s.bestTime;
+            delete s.bestTime;
+            DB.save(state);
+        }
+    })();
+
+    (function migrateConfusionState() {
+        const c = state.confusion;
+        if (!c.bestScores) {
+            c.bestScores = { endless: 0, survival: 0, speed: 0 };
+            if (c.highScore != null) c.bestScores.endless = c.highScore;
+            delete c.highScore;
+            DB.save(state);
+        }
+    })();
+
     function initSchulteGame() {
         const schData = state.schulte;
-        let numbers = Array.from({ length: 25 }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+        state.currentStage = 'lobby';
+        // Clear any stale timer from a previous game
+        if (state.activeInterval) { clearInterval(state.activeInterval); state.activeInterval = null; }
+        // Ensure bestTimes exists (safety)
+        if (!schData.bestTimes) schData.bestTimes = { '3x3': null, '4x4': null, '5x5': null, '6x6': null };
+
+        const sizes = [
+            { key: '3x3', n: 3, label: '3 × 3', sub: '9 numbers', emoji: '🟩' },
+            { key: '4x4', n: 4, label: '4 × 4', sub: '16 numbers', emoji: '🟦' },
+            { key: '5x5', n: 5, label: '5 × 5', sub: '25 numbers', emoji: '🟨' },
+            { key: '6x6', n: 6, label: '6 × 6', sub: '36 numbers', emoji: '🟥' }
+        ];
 
         mainContent.innerHTML = `
             ${gameToolbar('Schulte Grid')}
             <div class="view game-container">
-                <div class="schulte-header" style="text-align:center; margin-bottom:2rem;">
-                    <h2>Schulte Grid</h2>
-                    <p>Find numbers 1 → 25 in order as fast as you can!</p>
+                <div style="text-align:center; padding: 1rem 0 0.5rem;">
+                    <h2 style="font-size:2rem; margin-bottom:0.3rem;">🔢 Schulte Grid</h2>
+                    <p style="opacity:0.7; margin-bottom:1.5rem;">Choose a grid size to begin</p>
+                </div>
+                <div class="schulte-size-grid">
+                    ${sizes.map(s => `
+                        <button class="schulte-size-card" data-size="${s.key}">
+                            <div class="schulte-size-emoji">${s.emoji}</div>
+                            <div class="schulte-size-label">${s.label}</div>
+                            <div class="schulte-size-sub">${s.sub}</div>
+                            <div class="schulte-size-best">⏱️ Best: <strong>${schData.bestTimes[s.key] != null ? schData.bestTimes[s.key] + 's' : 'N/A'}</strong></div>
+                        </button>
+                    `).join('')}
+                </div>
+                <div style="text-align:center; margin-top:3rem; opacity:0.55; font-size:0.85rem; letter-spacing:1px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem;">🎮 Total Games Played: ${schData.gamesPlayed}</div>
+            </div>
+        `;
+
+        attachToolbarListeners();
+
+        document.querySelectorAll('.schulte-size-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const sizeKey = card.getAttribute('data-size');
+                const sizeN = parseInt(sizeKey[0]); // '3x3' → 3
+                playSchulteGrid(sizeKey, sizeN);
+            });
+        });
+
+        if (typeof gsap !== 'undefined') {
+            gsap.from('.schulte-size-card', { y: 30, stagger: 0.08, duration: 0.5, ease: 'back.out(1.4)' });
+        }
+    }
+
+    function playSchulteGrid(sizeKey, sizeN) {
+        // Clear any previous timer to prevent orphaned intervals
+        if (state.activeInterval) clearInterval(state.activeInterval);
+
+        const schData = state.schulte;
+        state.currentStage = 'playing';
+        const total = sizeN * sizeN;
+        let numbers = Array.from({ length: total }, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+
+        mainContent.innerHTML = `
+            ${gameToolbar('Schulte Grid')}
+            <div class="view game-container">
+                <div class="schulte-header" style="text-align:center; margin-bottom:1rem;">
+                    <h2 style="margin-bottom:0.2rem;">🔢 ${sizeKey} Grid</h2>
+                    <p style="opacity:0.7; margin-bottom:0.8rem;">Find numbers 1 → ${total} in order!</p>
                     <div class="schulte-stats-bar">
-                        <span>⏱️ Best: ${schData.bestTime ? schData.bestTime + 's' : 'N/A'}</span>
-                        <span>🎮 Played: ${schData.gamesPlayed}</span>
-                        <span id="next-hint">Next: <strong>1</strong></span>
+                        <span>⏱️ Best: ${schData.bestTimes[sizeKey] != null ? schData.bestTimes[sizeKey] + 's' : 'N/A'}</span>
+                        <span>Next: <strong id="next-hint">1</strong></span>
                     </div>
                     <div id="schulte-timer" class="timer-display">0.0s</div>
                 </div>
-                <div id="schulte-grid" class="schulte-grid-container">
+                <div id="schulte-grid" class="schulte-grid-container" style="grid-template-columns: repeat(${sizeN}, 1fr);">
                     ${numbers.map(n => `<button class="btn-option schulte-cell" data-val="${n}">${n}</button>`).join('')}
                 </div>
             </div>
@@ -1094,7 +1176,8 @@ document.addEventListener('DOMContentLoaded', () => {
         schData.gamesPlayed++;
         DB.save(state);
 
-        const timerInt = setInterval(() => {
+        // Store the timer in state.activeInterval so goBack() can clear it
+        state.activeInterval = setInterval(() => {
             const el = document.getElementById('schulte-timer');
             if (el) el.innerText = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
         }, 100);
@@ -1107,12 +1190,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     cell.disabled = true;
                     nextNum++;
                     const hint = document.getElementById('next-hint');
-                    if (hint) hint.innerHTML = `Next: <strong>${nextNum}</strong>`;
+                    if (hint) hint.textContent = nextNum <= total ? nextNum : '✅';
 
-                    if (nextNum > 25) {
-                        clearInterval(timerInt);
+                    if (nextNum > total) {
+                        clearInterval(state.activeInterval);
+                        state.activeInterval = null;
                         const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-                        finishSchulte(parseFloat(elapsed));
+                        finishSchulte(parseFloat(elapsed), sizeKey, sizeN);
                     }
                 } else {
                     cell.classList.add('wrong');
@@ -1122,30 +1206,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function finishSchulte(elapsed) {
+    function finishSchulte(elapsed, sizeKey, sizeN) {
         const schData = state.schulte;
-        const prevBest = schData.bestTime;
-        const isNewBest = schData.bestTime === null || elapsed < schData.bestTime;
-        if (isNewBest) schData.bestTime = elapsed;
+        if (!schData.bestTimes) schData.bestTimes = { '3x3': null, '4x4': null, '5x5': null, '6x6': null };
+        const prevBest = schData.bestTimes[sizeKey];
+        const isNewBest = prevBest === null || elapsed < prevBest;
+        if (isNewBest) schData.bestTimes[sizeKey] = elapsed;
         state.stars += 2;
         DB.save(state);
         updateNavStats();
 
         // Sync with backend
-        syncScore('schulte', elapsed, 1);
+        syncScore('schulte', elapsed, 1, { size: sizeKey });
 
         showResultCard({
             icon: isNewBest ? '🏆' : '✅',
-            title: isNewBest ? 'New Record! 🎉' : 'Grid Complete!',
-            subtitle: `You finished the Schulte Grid in ${elapsed}s`,
+            title: isNewBest ? `New ${sizeKey} Record! 🎉` : 'Grid Complete!',
+            subtitle: `You finished the ${sizeKey} Schulte Grid in ${elapsed}s`,
             details: [
+                { label: 'Grid Size', value: sizeKey },
                 { label: 'Your Time', value: `${elapsed}s` },
-                { label: 'Best Time', value: `${schData.bestTime}s` },
-                { label: 'Previous Best', value: prevBest ? `${prevBest}s` : 'N/A' },
-                { label: 'Stars', value: '+2 ⭐' }
+                { label: 'Best Time', value: `${schData.bestTimes[sizeKey]}s` },
+                { label: 'Previous Best', value: prevBest != null ? `${prevBest}s` : 'N/A' },
+                { label: 'Stars Earned', value: '+2 ⭐' }
             ],
             primaryLabel: '🔄 Play Again',
-            onPrimary: () => initSchulteGame()
+            onPrimary: () => playSchulteGrid(sizeKey, sizeN),
+            secondaryLabel: '← Choose Size',
+            onSecondary: () => initSchulteGame()
         });
     }
 
@@ -1198,7 +1286,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div class="help-item">
                             <h3>🔢 Schulte Grid</h3>
-                            <p>25 numbers randomly placed on a 5×5 grid. Click 1, then 2, then 3... all the way to 25 in order — as fast as possible. Use peripheral vision to get ahead!</p>
+                            <p>Numbers randomly placed on a grid (3×3, 4×4, 5×5, or 6×6). Click them in ascending order — 1, 2, 3… — as fast as possible. Use peripheral vision to get ahead!</p>
                         </div>
                     </div>
                     <button class="btn-cta" style="margin-top:2rem; width:auto;" id="help-back-btn">← Back to Games</button>
@@ -1232,12 +1320,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <div class="lb-card schulte">
                             <h3>🔢 Schulte Grid</h3>
-                            <div class="lb-stat"><span>Best Time</span><strong>${schData.bestTime ? schData.bestTime + 's' : 'N/A'}</strong></div>
+                            ${(function () {
+                const bt = schData.bestTimes || {};
+                return ['3x3', '4x4', '5x5', '6x6'].map(k =>
+                    `<div class="lb-stat"><span>Best ${k}</span><strong>${bt[k] != null ? bt[k] + 's' : 'N/A'}</strong></div>`
+                ).join('');
+            })()}
                             <div class="lb-stat"><span>Games Played</span><strong>${schData.gamesPlayed}</strong></div>
                         </div>
                         <div class="lb-card confusion">
                             <h3>🎨 Color Confusion</h3>
-                            <div class="lb-stat"><span>High Score</span><strong>${state.confusion.highScore} pts</strong></div>
+                            ${(function () {
+                const bs = state.confusion.bestScores || { endless: 0, survival: 0, speed: 0 };
+                return [
+                    { k: 'endless', l: 'Endless' },
+                    { k: 'survival', l: 'Survival' },
+                    { k: 'speed', l: 'Speed Run' }
+                ].map(m =>
+                    `<div class="lb-stat"><span>Best ${m.l}</span><strong>${bs[m.k] || 0} pts</strong></div>`
+                ).join('');
+            })()}
                             <div class="lb-stat"><span>Games Played</span><strong>${state.confusion.gamesPlayed}</strong></div>
                         </div>
                     </div>
@@ -1277,11 +1379,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button class="mode-btn speed" onclick="startConfusionMode('speed')">
                         <span>SPEED RUN</span>
                         <span class="mode-tag">TARGET 50</span>
-                    </button>
-
-                    <button class="btn-leaderboard-lite" onclick="renderLeaderboard()">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>
-                        LEADERBOARD
                     </button>
 
                     <div class="conf-ver">v1.0.0 // SYSTEM READY</div>
@@ -1472,6 +1569,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function finishRefinedConfusion({ mode, score, totalPoints, reactions, maxCombo, startTime }) {
         const confData = state.confusion;
+        if (!confData.bestScores) confData.bestScores = { endless: 0, survival: 0, speed: 0 };
+
+        const prevBest = confData.bestScores[mode] || 0;
+        const isNewBest = totalPoints > prevBest;
+        if (isNewBest) confData.bestScores[mode] = totalPoints;
+
         const finalTime = ((Date.now() - startTime) / 1000).toFixed(2);
         const avgRT = reactions.length > 0 ? (reactions.reduce((a, b) => a + b, 0) / reactions.length).toFixed(0) : 'N/A';
 
@@ -1484,7 +1587,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.stars += Math.floor(score / 10);
         DB.save(state);
         updateNavStats();
-        syncScore('confusion', totalPoints, 1, { mode, avgRT, rating });
+        syncScore('confusion', totalPoints, 1, { mode, avgRT, rating, isNewBest });
 
         showResultCard({
             icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 80px; height: 80px; color: var(--mode-${mode});"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
