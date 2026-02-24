@@ -36,6 +36,286 @@ document.addEventListener('DOMContentLoaded', () => {
         ...DB.load()
     };
 
+    /* =============================================
+       SOUND ENGINE — Web Audio API synthesizer
+       ============================================= */
+    const SoundEngine = (() => {
+        let ctx = null;
+        let muted = false;
+        let activeOscillators = [];
+        let bgGain = null;
+        let bgOscillators = [];
+        let bgPlaying = false;
+        let heartbeatInterval = null;
+        let bgInterval = null;
+        let bgStep = 0;
+
+        function getCtx() {
+            if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (ctx.state === 'suspended') ctx.resume();
+            return ctx;
+        }
+
+        function osc(type, freq, duration, volume = 0.1, rampFreq = null) {
+            if (muted) return;
+            try {
+                const c = getCtx();
+                const o = c.createOscillator();
+                const g = c.createGain();
+                o.type = type;
+                o.frequency.setValueAtTime(freq, c.currentTime);
+                if (rampFreq !== null) o.frequency.exponentialRampToValueAtTime(rampFreq, c.currentTime + duration);
+                g.gain.setValueAtTime(volume, c.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration);
+                o.connect(g);
+                g.connect(c.destination);
+                o.start(c.currentTime);
+                o.stop(c.currentTime + duration);
+                activeOscillators.push(o);
+                o.onended = () => { activeOscillators = activeOscillators.filter(x => x !== o); };
+            } catch (e) { }
+        }
+
+        return {
+            get muted() { return muted; },
+            toggleMute() {
+                muted = !muted;
+                if (muted) this.stopAll();
+                return muted;
+            },
+
+            // Short crisp click
+            click() { osc('sine', 1000, 0.05, 0.08); },
+
+            // Pleasant ascending tone
+            correct() {
+                if (muted) return;
+                try {
+                    const c = getCtx();
+                    const t = c.currentTime;
+                    // Two quick ascending notes
+                    [523, 784].forEach((f, i) => {
+                        const o = c.createOscillator();
+                        const g = c.createGain();
+                        o.type = 'sine';
+                        o.frequency.setValueAtTime(f, t);
+                        g.gain.setValueAtTime(0.12, t + i * 0.08);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.12);
+                        o.connect(g); g.connect(c.destination);
+                        o.start(t + i * 0.08);
+                        o.stop(t + i * 0.08 + 0.12);
+                        activeOscillators.push(o);
+                        o.onended = () => { activeOscillators = activeOscillators.filter(x => x !== o); };
+                    });
+                } catch (e) { }
+            },
+
+            // Descending buzzer
+            wrong() { osc('sawtooth', 200, 0.25, 0.1); },
+
+            // Timer tick
+            tick() { osc('sine', 800, 0.03, 0.06); },
+
+            // Double heartbeat thump
+            heartbeat() {
+                if (muted) return;
+                try {
+                    const c = getCtx();
+                    const t = c.currentTime;
+                    [0, 0.15].forEach(delay => {
+                        const o = c.createOscillator();
+                        const g = c.createGain();
+                        o.type = 'sine';
+                        o.frequency.setValueAtTime(60, t + delay);
+                        g.gain.setValueAtTime(0.2, t + delay);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.15);
+                        o.connect(g); g.connect(c.destination);
+                        o.start(t + delay);
+                        o.stop(t + delay + 0.15);
+                        activeOscillators.push(o);
+                        o.onended = () => { activeOscillators = activeOscillators.filter(x => x !== o); };
+                    });
+                } catch (e) { }
+            },
+
+            // Start a looping heartbeat (for timers about to end)
+            startHeartbeatLoop() {
+                if (heartbeatInterval) return;
+                this.heartbeat();
+                heartbeatInterval = setInterval(() => this.heartbeat(), 800);
+            },
+            stopHeartbeatLoop() {
+                if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+            },
+
+            // F1 light beep
+            lightBeep() { osc('sine', 440, 0.1, 0.1); },
+
+            // F1 GO burst
+            goBurst() { osc('sine', 1200, 0.3, 0.15, 600); },
+
+            // False start warning
+            falseStart() { osc('square', 150, 0.5, 0.12); },
+
+            // Level complete fanfare (C-E-G-C arpeggio)
+            fanfare() {
+                if (muted) return;
+                try {
+                    const c = getCtx();
+                    const t = c.currentTime;
+                    [523, 659, 784, 1047].forEach((f, i) => {
+                        const o = c.createOscillator();
+                        const g = c.createGain();
+                        o.type = 'sine';
+                        o.frequency.setValueAtTime(f, t);
+                        g.gain.setValueAtTime(0, t);
+                        g.gain.linearRampToValueAtTime(0.12, t + i * 0.12 + 0.01);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.2);
+                        o.connect(g); g.connect(c.destination);
+                        o.start(t + i * 0.12);
+                        o.stop(t + i * 0.12 + 0.2);
+                        activeOscillators.push(o);
+                        o.onended = () => { activeOscillators = activeOscillators.filter(x => x !== o); };
+                    });
+                } catch (e) { }
+            },
+
+            // Background ambient music — dual mode (lobby vs suspense)
+            startBgMusic(type = 'lobby') {
+                if (muted) return;
+                // If already playing the same type, ignore. Otherwise stop and switch.
+                if (bgPlaying && this.currentMusicType === type) return;
+                if (bgPlaying) this.stopBgMusic();
+
+                try {
+                    const c = getCtx();
+                    bgPlaying = true;
+                    this.currentMusicType = type;
+                    bgStep = 0;
+
+                    const lobbySequence = [
+                        130.81, 164.81, 196.00, 261.63, // Cmaj
+                        98.00, 146.83, 196.00, 246.94,  // Gmaj
+                        110.00, 164.81, 220.00, 261.63, // Am
+                        87.31, 130.81, 196.00, 220.00   // Fmaj
+                    ];
+
+                    // Soothing Suspense: A-minor based tension
+                    const suspenseSequence = [
+                        55.00, 82.41,  // Bass pulses (A1, E2)
+                        110.00, 130.81, // A2, C3
+                        55.00, 73.42,  // A1, D2
+                        110.00, 146.83  // A2, D3
+                    ];
+
+                    const sequence = type === 'lobby' ? lobbySequence : suspenseSequence;
+                    const interval = type === 'lobby' ? 250 : 1500; // Fast for lobby arpeggio, slow for suspense
+
+                    const playNote = () => {
+                        if (muted || !bgPlaying) return;
+                        const freq = sequence[bgStep % sequence.length];
+
+                        const playGuitarPluck = (f, vol, dcy) => {
+                            // Main string sound (Triangle for acoustic feel)
+                            const o = c.createOscillator();
+                            const g = c.createGain();
+                            o.type = 'triangle';
+                            o.frequency.setValueAtTime(f, c.currentTime);
+
+                            // Harmonic (one octave up, quieter)
+                            const oh = c.createOscillator();
+                            const gh = c.createGain();
+                            oh.type = 'triangle';
+                            oh.frequency.setValueAtTime(f * 2, c.currentTime);
+
+                            // Envelope: Shorter attack for "plucked" feel
+                            const attack = 0.01;
+                            g.gain.setValueAtTime(0, c.currentTime);
+                            g.gain.linearRampToValueAtTime(vol, c.currentTime + attack);
+                            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dcy);
+
+                            gh.gain.setValueAtTime(0, c.currentTime);
+                            gh.gain.linearRampToValueAtTime(vol * 0.4, c.currentTime + attack);
+                            gh.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dcy * 0.8);
+
+                            // Subtle pluck noise (white noise burst)
+                            const bufSize = c.sampleRate * 0.02;
+                            const buffer = c.createBuffer(1, bufSize, c.sampleRate);
+                            const data = buffer.getChannelData(0);
+                            for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+                            const noise = c.createBufferSource();
+                            const nGain = c.createGain();
+                            noise.buffer = buffer;
+                            nGain.gain.setValueAtTime(vol * 0.2, c.currentTime);
+                            nGain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.02);
+
+                            o.connect(g); g.connect(c.destination);
+                            oh.connect(gh); gh.connect(c.destination);
+                            noise.connect(nGain); nGain.connect(c.destination);
+
+                            o.start(c.currentTime); o.stop(c.currentTime + dcy);
+                            oh.start(c.currentTime); oh.stop(c.currentTime + dcy);
+                            noise.start(c.currentTime);
+
+                            bgOscillators.push(o, oh);
+                            o.onended = () => { bgOscillators = bgOscillators.filter(x => x !== o && x !== oh); };
+                        };
+
+                        if (type === 'lobby') {
+                            playGuitarPluck(freq, 0.04, 3.0);
+                        } else {
+                            // Suspense mode remains as-is (sine waves, slower pulse)
+                            const o = c.createOscillator();
+                            const g = c.createGain();
+                            o.type = 'sine';
+                            o.frequency.setValueAtTime(freq, c.currentTime);
+
+                            if (bgStep % 4 === 0) {
+                                const highO = c.createOscillator();
+                                const highG = c.createGain();
+                                highO.type = 'sine';
+                                highO.frequency.setValueAtTime(freq * 4, c.currentTime);
+                                highG.gain.setValueAtTime(0, c.currentTime);
+                                highG.gain.linearRampToValueAtTime(0.015, c.currentTime + 1.0);
+                                highG.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 4.0);
+                                highO.connect(highG); highG.connect(c.destination);
+                                highO.start(c.currentTime); highO.stop(c.currentTime + 4.0);
+                            }
+
+                            g.gain.setValueAtTime(0, c.currentTime);
+                            g.gain.linearRampToValueAtTime(0.05, c.currentTime + 0.2);
+                            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 4.0);
+                            o.connect(g); g.connect(c.destination);
+                            o.start(c.currentTime); o.stop(c.currentTime + 4.0);
+                            bgOscillators.push(o);
+                            o.onended = () => { bgOscillators = bgOscillators.filter(x => x !== o); };
+                        }
+
+                        bgStep++;
+                    };
+
+                    playNote();
+                    bgInterval = setInterval(playNote, interval);
+                } catch (e) { }
+            },
+            stopBgMusic() {
+                if (bgInterval) { clearInterval(bgInterval); bgInterval = null; }
+                bgOscillators.forEach(o => { try { o.stop(); } catch (e) { } });
+                bgOscillators = [];
+                bgPlaying = false;
+                this.currentMusicType = null;
+            },
+
+            // Kill everything
+            stopAll() {
+                this.stopHeartbeatLoop();
+                this.stopBgMusic();
+                activeOscillators.forEach(o => { try { o.stop(); } catch (e) { } });
+                activeOscillators = [];
+            }
+        };
+    })();
+
     async function syncScore(gameType, score, level = 1, extraData = {}) {
         if (!state.user) return;
         try {
@@ -128,6 +408,13 @@ document.addEventListener('DOMContentLoaded', () => {
        EVENT LISTENERS
        ============================================= */
     function setupEventListeners() {
+        // Global click sound for all buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('button')) {
+                SoundEngine.click();
+            }
+        });
+
         // Navbar links
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', e => {
@@ -193,18 +480,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function goBack() {
+        // Stop all sounds when navigating away
+        SoundEngine.stopAll();
         // Sequential navigation logic
         if (state.currentGame === 'memory' && state.currentStage === 'playing') {
+            SoundEngine.startBgMusic('lobby');
             if (state.activeInterval) clearInterval(state.activeInterval);
             initMemoryLobby();
             return;
         }
         if (state.currentGame === 'schulte' && state.currentStage === 'playing') {
+            SoundEngine.startBgMusic('lobby');
             if (state.activeInterval) clearInterval(state.activeInterval);
             initSchulteGame();
             return;
         }
         if (state.currentGame === 'confusion' && state.currentStage === 'playing') {
+            SoundEngine.startBgMusic('lobby');
             if (state.activeInterval) clearInterval(state.activeInterval);
             initConfusionGame();
             return;
@@ -212,6 +504,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Returns to home tab selection (game lobby) without page reload
         if (state.activeInterval) clearInterval(state.activeInterval);
+        SoundEngine.stopBgMusic(); // Stop music when at home screen
         state.currentGame = null;
         state.currentView = 'home';
         state.currentStage = 'home';
@@ -325,6 +618,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span>&#8592;</span> Back
                 </button>
                 <span class="toolbar-title">${gameTitle}</span>
+                <button class="toolbar-btn" id="btn-mute" title="Toggle Sound" style="font-size:1.2rem; min-width:40px;">
+                    ${SoundEngine.muted ? '🔇' : '🔊'}
+                </button>
             </div>
         `;
     }
@@ -332,6 +628,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function attachToolbarListeners() {
         const backBtn = document.getElementById('btn-back');
         if (backBtn) backBtn.addEventListener('click', goBack);
+        const muteBtn = document.getElementById('btn-mute');
+        if (muteBtn) muteBtn.addEventListener('click', () => {
+            const nowMuted = SoundEngine.toggleMute();
+            muteBtn.textContent = nowMuted ? '🔇' : '🔊';
+        });
     }
 
     /* =============================================
@@ -427,6 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
        ============================================= */
     function startGame(gameId) {
         state.currentGame = gameId;
+        SoundEngine.startBgMusic(); // Start background atmosphere
         if (gameId === 'memory') initMemoryLobby();
         else if (gameId === 'f1') initF1Game();
         else if (gameId === 'schulte') initSchulteGame();
@@ -518,6 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initMemoryLobby() {
+        SoundEngine.startBgMusic('lobby');
         const memData = state.memory;
         state.currentStage = 'lobby';
         mainContent.innerHTML = `
@@ -570,7 +873,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         attachToolbarListeners();
 
-        document.getElementById('start-memory-game').onclick = () => initMemoryGame();
+        document.getElementById('start-memory-game').onclick = () => {
+            SoundEngine.click();
+            initMemoryGame();
+        };
 
         document.querySelectorAll('.buy-btn').forEach(btn => {
             btn.onclick = () => {
@@ -595,6 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initMemoryGame() {
+        SoundEngine.startBgMusic('lobby');
         const memData = state.memory;
         let level = memData.level;
         state.currentStage = 'playing';
@@ -680,7 +987,20 @@ document.addEventListener('DOMContentLoaded', () => {
         state.activeInterval = setInterval(() => {
             timerSeconds--;
             const timerEl = document.getElementById('game-timer');
-            if (timerEl) timerEl.innerText = `${timerSeconds}s`;
+            if (timerEl) {
+                timerEl.innerText = `${timerSeconds}s`;
+                // Add tick sound
+                SoundEngine.tick();
+
+                // Urgency at 3 seconds: Red color + Heartbeat
+                if (timerSeconds <= 3 && timerSeconds > 0) {
+                    timerEl.style.color = '#ef4444'; // Red
+                    timerEl.style.fontWeight = '800';
+                    SoundEngine.startHeartbeatLoop();
+                } else if (timerSeconds <= 0) {
+                    SoundEngine.stopHeartbeatLoop();
+                }
+            }
             if (progressEl) progressEl.style.width = `${(timerSeconds / totalTime) * 100}%`;
 
             if (timerSeconds <= 0) {
@@ -746,14 +1066,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (correct) {
                         score++;
                         btn.classList.add('correct');
+                        SoundEngine.correct();
                     } else {
                         if (hasShield) {
                             hasShield = false;
                             score++; // Grant point as shield usage
                             btn.classList.add('correct');
+                            SoundEngine.correct();
                             showToast('🛡️ Shield protected you!');
                         } else {
                             btn.classList.add('wrong');
+                            SoundEngine.wrong();
                             ansBtns.querySelectorAll('.ro-answer-btn').forEach(b => {
                                 if (b.textContent.trim() === currentObj.color) b.classList.add('correct');
                             });
@@ -807,6 +1130,9 @@ document.addEventListener('DOMContentLoaded', () => {
         DB.save(state);
         updateNavStats();
 
+        // Success sound
+        if (success) SoundEngine.fanfare();
+
         // Sync with backend
         syncScore('memory', score, level, { success, starsEarned });
 
@@ -834,6 +1160,7 @@ document.addEventListener('DOMContentLoaded', () => {
        Spacebar: react when GO, or replay after result
        ============================================= */
     function initF1Game() {
+        SoundEngine.startBgMusic('lobby');
         const f1Data = state.f1;
 
         /* ── Spacebar State Machine ──
@@ -897,6 +1224,7 @@ document.addEventListener('DOMContentLoaded', () => {
         /* ── Core: Start the race (lights sequence → GO) ── */
         function handleStartRace() {
             if (f1State !== 'idle') return;
+            SoundEngine.startBgMusic('lobby');
             f1State = 'waiting';
 
             const startBtn = document.getElementById('start-f1');
@@ -910,6 +1238,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lightInterval = setInterval(() => {
                 if (i <= 5) {
                     document.getElementById(`light-${i}`)?.classList.add('on');
+                    SoundEngine.lightBeep();
                     i++;
                 } else {
                     clearInterval(lightInterval);
@@ -921,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         raceTimeout = null;
                         [1, 2, 3, 4, 5].forEach(id => document.getElementById(`light-${id}`)?.classList.remove('on'));
                         if (statusEl) statusEl.innerHTML = '<span style="font-size:2rem;">🟢 GO!</span>';
+                        SoundEngine.goBurst();
 
                         startTime = Date.now();
                         const reactBtn = document.getElementById('react-btn');
@@ -957,6 +1287,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (raceTimeout) { clearTimeout(raceTimeout); raceTimeout = null; }
             if (lightInterval) { clearInterval(lightInterval); lightInterval = null; }
 
+            SoundEngine.falseStart();
             const statusEl = document.getElementById('f1-status');
             if (statusEl) {
                 statusEl.innerHTML = '<span style="color:#ef4444; font-size:1.5rem; font-weight:800;">⚠️ FALSE START!</span>';
@@ -1002,7 +1333,9 @@ document.addEventListener('DOMContentLoaded', () => {
         backBtn?.addEventListener('click', cleanupF1Listeners);
 
         // Existing button click → calls the same handler
-        document.getElementById('start-f1').addEventListener('click', handleStartRace);
+        document.getElementById('start-f1').addEventListener('click', () => {
+            handleStartRace();
+        });
     }
 
     function showF1Result(time, replayCallback) {
@@ -1014,6 +1347,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         DB.save(state);
         updateNavStats();
+        SoundEngine.fanfare();
 
         const drivers = [
             { name: 'Ayrton Senna', time: 175 },
@@ -1092,6 +1426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     })();
 
     function initSchulteGame() {
+        SoundEngine.startBgMusic('lobby');
         const schData = state.schulte;
         state.currentStage = 'lobby';
         // Clear any stale timer from a previous game
@@ -1136,13 +1471,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 playSchulteGrid(sizeKey, sizeN);
             });
         });
-
         if (typeof gsap !== 'undefined') {
             gsap.from('.schulte-size-card', { y: 30, stagger: 0.08, duration: 0.5, ease: 'back.out(1.4)' });
         }
     }
 
     function playSchulteGrid(sizeKey, sizeN) {
+        SoundEngine.startBgMusic('lobby');
         // Clear any previous timer to prevent orphaned intervals
         if (state.activeInterval) clearInterval(state.activeInterval);
 
@@ -1186,6 +1521,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cell.onclick = () => {
                 const val = parseInt(cell.getAttribute('data-val'));
                 if (val === nextNum) {
+                    SoundEngine.correct();
                     cell.classList.add('found');
                     cell.disabled = true;
                     nextNum++;
@@ -1196,9 +1532,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         clearInterval(state.activeInterval);
                         state.activeInterval = null;
                         const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+                        SoundEngine.fanfare();
                         finishSchulte(parseFloat(elapsed), sizeKey, sizeN);
                     }
                 } else {
+                    SoundEngine.wrong();
                     cell.classList.add('wrong');
                     setTimeout(() => cell.classList.remove('wrong'), 500);
                 }
@@ -1399,6 +1737,7 @@ document.addEventListener('DOMContentLoaded', () => {
        GAME 4: COLOR CONFUSION — STROOP EFFECT
        ============================================= */
     function initConfusionGame() {
+        SoundEngine.startBgMusic('lobby');
         const confData = state.confusion;
         state.currentStage = 'lobby';
         mainContent.innerHTML = `
@@ -1430,29 +1769,12 @@ document.addEventListener('DOMContentLoaded', () => {
         attachToolbarListeners();
     }
 
-    function playFeedback(type) {
-        try {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            if (type === 'success') {
-                oscillator.frequency.setTargetAtTime(800, audioCtx.currentTime, 0.05);
-                gainNode.gain.setTargetAtTime(0.1, audioCtx.currentTime, 0.05);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.1);
-            } else {
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setTargetAtTime(120, audioCtx.currentTime, 0.05);
-                gainNode.gain.setTargetAtTime(0.1, audioCtx.currentTime, 0.05);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.2);
-            }
-        } catch (e) { }
-    }
+    // SoundEngine handles correctly/wrong sounds internally now.
+    // Removed old playFeedback function.
+
 
     window.startConfusionMode = function (mode) {
+        SoundEngine.startBgMusic('lobby');
         const confData = state.confusion;
         state.currentStage = 'playing';
         confData.gamesPlayed++;
@@ -1477,10 +1799,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
 
-                <div class="stroop-central-card" id="stroop-card">
+                <div class="stroop-central-card" id="stroop-card" style="background: #ffffff; border: 2px solid #e0e0e0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
                     <div id="combo-display" class="combo-badge hidden">Combo x1</div>
                     <div class="stroop-word" id="stroop-word"></div>
-                    <div class="card-instruction">Select the FONT COLOR</div>
+                    <div class="card-instruction" style="color: #000;">Select the FONT COLOR</div>
                 </div>
 
                 <div id="stroop-options" class="conf-answer-grid"></div>
@@ -1496,6 +1818,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mode === 'survival') {
                 timeLeft = Math.max(0, timeLeft - 0.1);
                 if (metaValue) metaValue.innerText = timeLeft.toFixed(1) + 's';
+
+                // Heartbeat urgency for Survival Mode
+                if (timeLeft <= 5 && timeLeft > 0) {
+                    SoundEngine.startHeartbeatLoop();
+                } else if (timeLeft <= 0) {
+                    SoundEngine.stopHeartbeatLoop();
+                }
+
                 if (timeLeft <= 0) {
                     clearInterval(state.activeInterval);
                     finishRefinedConfusion({ mode, score, totalPoints, reactions, maxCombo, startTime });
@@ -1550,6 +1880,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     btn.className = 'conf-answer-btn';
                     btn.setAttribute('data-color', opt.toUpperCase());
                     btn.innerText = opt.toUpperCase();
+                    btn.style.color = '#000000';
+                    btn.style.backgroundColor = '#f0f0f0';
+                    btn.style.border = '2px solid #e0e0e0';
                     btn.onclick = () => {
                         const RT = Date.now() - questionStartTime;
                         reactions.push(RT);
@@ -1558,7 +1891,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             score++;
                             combo++;
                             maxCombo = Math.max(maxCombo, combo);
-                            playFeedback('success');
+                            SoundEngine.correct();
 
                             const basePoints = 10;
                             const speedBonus = Math.max(0, Math.floor((2000 - RT) / 100)); // 2s window for bonus
@@ -1580,7 +1913,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             setTimeout(ask, 100);
                         } else {
                             combo = 0;
-                            playFeedback('error');
+                            SoundEngine.wrong();
                             if (comboEl) comboEl.classList.add('hidden');
                             btn.classList.add('wrong');
 
