@@ -1582,7 +1582,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const developers = [
             { name: 'Siddhi', role: 'Lead Developer', seed: 'Siddhi', color: 'var(--golden-yellow)' },
             { name: 'Yaksh', role: 'Co-Developer', seed: 'Yaksh', color: 'var(--pastel-green, #a8e6cf)', customImg: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberKnight&eyes=robocop' },
-            { name: 'Rudra', role: 'Co-Developer', seed: 'Rudra', color: 'var(--pastel-green, #a8e6cf)' },
+            { name: 'Rudra', role: 'Co-Developer', seed: 'Rudra', color: 'var(--pastel-green, #a8e6cf)', customImg: 'https://api.dicebear.com/7.x/bottts/svg?seed=WebHacker&eyes=eva&mouth=grill03&baseColor=00e676' },
             { name: 'Mayuri', role: 'Collaborator', seed: 'Mayuri', color: 'var(--pastel-blue, #a8d8ea)' },
             { name: 'Sakshi', role: 'Collaborator', seed: 'Sakshi', color: 'var(--pastel-blue, #a8d8ea)' },
             { name: 'Madhuri', role: 'Collaborator', seed: 'Madhuri', color: 'var(--pastel-blue, #a8d8ea)' },
@@ -1607,7 +1607,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="view">
                 <div class="game-overlay glass" style="text-align:left; max-width:850px;">
                     <h2 style="font-size:3rem; margin-bottom:0.5rem;">About <span class="highlight-yellow">Master Mind</span></h2>
-                    <p style="color:var(--text-dim); margin-bottom:2rem; font-size:1.1rem;">Meet the team behind the game</p>
+                    <p style="color:var(--text-dim); margin-bottom:2rem; font-size:1.1rem;">Meet the master minds behind the game</p>
 
                     <h3 style="margin-bottom:1rem; font-size:1.4rem;">👨‍💻 Development Team</h3>
                     <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:1rem; margin-bottom:2rem;">
@@ -1626,7 +1626,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     <h3 style="margin-bottom:1rem; font-size:1.4rem;">💻 IDE</h3>
                     <p style="line-height:1.9; margin-bottom:0.5rem;">
-                        This game was developed using <span style="color:var(--golden-yellow); font-weight:700;">Visual Studio Code</span> — a lightweight yet powerful code editor by Microsoft, enhanced with extensions for live preview, debugging, and seamless collaboration.
+                        This game was developed using <span style="color:var(--golden-yellow); font-weight:700;">Antigravity</span> — an AI-powered agentic coding assistant by Google DeepMind, enabling intelligent code generation, seamless collaboration, and rapid development.
                     </p>
 
                     <button class="btn-cta" style="margin-top:2rem; width:auto;" id="about-back-btn">← Back to Games</button>
