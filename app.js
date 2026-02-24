@@ -1579,28 +1579,56 @@ document.addEventListener('DOMContentLoaded', () => {
        ABOUT / HELP / LEADERBOARD VIEWS
        ============================================= */
     function renderAbout() {
+        const developers = [
+            { name: 'Siddhi', role: 'Lead Developer', seed: 'Siddhi', color: 'var(--golden-yellow)' },
+            { name: 'Yaksh', role: 'Co-Developer', seed: 'Yaksh', color: 'var(--pastel-green, #a8e6cf)', customImg: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberKnight&eyes=robocop' },
+            { name: 'Rudra', role: 'Co-Developer', seed: 'Rudra', color: 'var(--pastel-green, #a8e6cf)' },
+            { name: 'Mayuri', role: 'Collaborator', seed: 'Mayuri', color: 'var(--pastel-blue, #a8d8ea)' },
+            { name: 'Sakshi', role: 'Collaborator', seed: 'Sakshi', color: 'var(--pastel-blue, #a8d8ea)' },
+            { name: 'Madhuri', role: 'Collaborator', seed: 'Madhuri', color: 'var(--pastel-blue, #a8d8ea)' },
+        ];
+
+        const devCards = developers.map(dev => {
+            const imgSrc = dev.customImg ? dev.customImg : 'https://api.dicebear.com/7.x/bottts/svg?seed=' + dev.seed;
+            return `
+            <div style="display:flex; gap:1.2rem; align-items:center; padding:1rem 1.2rem; border-radius:16px; background:rgba(255,255,255,0.04); transition: transform 0.2s, box-shadow 0.2s;"
+                 onmouseenter="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 8px 24px rgba(0,0,0,0.15)';"
+                 onmouseleave="this.style.transform=''; this.style.boxShadow='';">
+                <img src="${imgSrc}" style="width:70px; border-radius:14px; background:var(--pastel-blue); padding:6px; flex-shrink:0;">
+                <div>
+                    <h3 style="font-size:1.3rem; margin-bottom:4px;">${dev.name}</h3>
+                    <p style="color:${dev.color}; font-weight:700; font-size:0.95rem;">${dev.role}</p>
+                </div>
+            </div>
+        `;
+        }).join('');
+
         mainContent.innerHTML = `
             <div class="view">
-                <div class="game-overlay glass" style="text-align:left; max-width:800px;">
-                    <h2 style="font-size:3rem; margin-bottom:2rem;">About <span class="highlight-yellow">Master Mind</span></h2>
-                    <div style="display:flex; gap:2rem; align-items:center; margin-bottom:2rem;">
-                        <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Siddhi" style="width:130px; border-radius:20px; background:var(--pastel-blue); padding:10px; flex-shrink:0;">
-                        <div>
-                            <h3 style="font-size:1.8rem; margin-bottom:8px;">Siddhi Hingne</h3>
-                            <p style="color:var(--golden-yellow); font-weight:700; margin-bottom:8px;">Lead Developer &amp; Architect</p>
-                            <p style="color:var(--text-dim);">Passionate about cognitive science, brain training, and exceptional UI/UX.</p>
-                        </div>
+                <div class="game-overlay glass" style="text-align:left; max-width:850px;">
+                    <h2 style="font-size:3rem; margin-bottom:0.5rem;">About <span class="highlight-yellow">Master Mind</span></h2>
+                    <p style="color:var(--text-dim); margin-bottom:2rem; font-size:1.1rem;">Meet the team behind the game</p>
+
+                    <h3 style="margin-bottom:1rem; font-size:1.4rem;">👨‍💻 Development Team</h3>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:1rem; margin-bottom:2rem;">
+                        ${devCards}
                     </div>
+
                     <hr style="margin:1.5rem 0; opacity:0.1;">
-                    <h3 style="margin-bottom:1rem;">Why Master Mind?</h3>
-                    <p style="line-height:1.9; margin-bottom:1rem;">
-                        Master Mind was created because Siddhi noticed that most brain-training apps are either boring or ineffective. 
-                        The mission: build an engaging platform that actually challenges memory, reflex, and visual cognition—all wrapped in a design that makes you want to come back every day.
+
+                    <h3 style="margin-bottom:1rem; font-size:1.4rem;">🛠️ Built With</h3>
+                    <div style="display:flex; flex-wrap:wrap; gap:0.8rem; margin-bottom:2rem;">
+                        <span style="padding:8px 18px; border-radius:12px; background:rgba(255,255,255,0.06); font-weight:600; font-size:0.95rem;">HTML5</span>
+                        <span style="padding:8px 18px; border-radius:12px; background:rgba(255,255,255,0.06); font-weight:600; font-size:0.95rem;">CSS3</span>
+                        <span style="padding:8px 18px; border-radius:12px; background:rgba(255,255,255,0.06); font-weight:600; font-size:0.95rem;">JavaScript</span>
+                        <span style="padding:8px 18px; border-radius:12px; background:rgba(255,255,255,0.06); font-weight:600; font-size:0.95rem;">Python (Flask)</span>
+                    </div>
+
+                    <h3 style="margin-bottom:1rem; font-size:1.4rem;">💻 IDE</h3>
+                    <p style="line-height:1.9; margin-bottom:0.5rem;">
+                        This game was developed using <span style="color:var(--golden-yellow); font-weight:700;">Visual Studio Code</span> — a lightweight yet powerful code editor by Microsoft, enhanced with extensions for live preview, debugging, and seamless collaboration.
                     </p>
-                    <p style="line-height:1.9;">
-                        Every level is tuned to promote neuroplasticity, and every game mechanic is backed by cognitive research. 
-                        Whether you're chasing a split-second F1 reaction time or levelling up your room-observer memory—Master Mind makes every second count.
-                    </p>
+
                     <button class="btn-cta" style="margin-top:2rem; width:auto;" id="about-back-btn">← Back to Games</button>
                 </div>
             </div>
