@@ -1150,7 +1150,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: 'Total Stars', value: `${state.stars || 0} ⭐` }
             ],
             primaryLabel: success ? 'Next Level ▶' : 'Replay Level 🔄',
-            onPrimary: () => initMemoryGame()
+            onPrimary: () => initMemoryGame(),
+            secondaryLabel: 'Back to Lobby 🏠',
+            onSecondary: () => initMemoryLobby()
         });
     }
 
