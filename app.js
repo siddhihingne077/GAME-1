@@ -1629,6 +1629,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span style="padding:8px 18px; border-radius:12px; background:rgba(255,255,255,0.06); font-weight:600; font-size:0.95rem;">CSS3</span>
                         <span style="padding:8px 18px; border-radius:12px; background:rgba(255,255,255,0.06); font-weight:600; font-size:0.95rem;">JavaScript</span>
                         <span style="padding:8px 18px; border-radius:12px; background:rgba(255,255,255,0.06); font-weight:600; font-size:0.95rem;">Python (Flask)</span>
+                        <span style="padding:8px 18px; border-radius:12px; background:rgba(255,255,255,0.06); font-weight:600; font-size:0.95rem;">C++</span>
                     </div>
 
                     <h3 style="margin-bottom:1rem; font-size:1.4rem;">💻 IDE</h3>
