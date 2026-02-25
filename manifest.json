@@ -1,0 +1,23 @@
+{
+    "name": "Master Mind | Ultimate Brain Training",
+    "short_name": "MasterMind",
+    "description": "Unlock your brain's potential with Master Mind.",
+    "start_url": "index.html",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#6366f1",
+    "icons": [
+        {
+            "src": "https://api.dicebear.com/7.x/avataaars/svg?seed=MasterMind&backgroundColor=6366f1",
+            "sizes": "192x192",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "https://api.dicebear.com/7.x/avataaars/svg?seed=MasterMind&backgroundColor=6366f1",
+            "sizes": "512x512",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        }
+    ]
+}
