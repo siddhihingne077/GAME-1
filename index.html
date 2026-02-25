@@ -1,124 +1,274 @@
 <!DOCTYPE html>
+<!-- Declares this as an HTML5 document — tells the browser to use modern HTML standards -->
+
 <html lang="en">
+<!-- Root HTML element with language set to English for accessibility and SEO -->
 
 <head>
+    <!-- Head section contains metadata, styles, and scripts that load before the page content -->
+
     <meta charset="UTF-8">
+    <!-- Sets character encoding to UTF-8 to support all international characters and emojis -->
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Makes the page responsive on mobile devices by matching the viewport width to the device screen -->
+
     <title>Master Mind | Ultimate Brain Training</title>
+    <!-- Sets the browser tab title — also important for SEO and bookmarking -->
+
     <link rel="stylesheet" href="style.css">
+    <!-- Links the external CSS stylesheet that contains all visual styling for the game -->
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <!-- Establishes an early connection to Google Fonts server for faster font loading -->
+
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Establishes an early cross-origin connection to Google's static font file server -->
+
     <link
         href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Quicksand:wght@400;500;600;700&display=swap"
         rel="stylesheet">
+    <!-- Loads the Poppins and Quicksand Google Fonts with multiple weights for use throughout the game UI -->
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <!-- Loads GSAP (GreenSock Animation Platform) library for smooth, high-performance animations throughout the game -->
 </head>
 
 <body>
+    <!-- Body contains all visible page content -->
+
     <div id="loader" class="loader-wrapper">
+        <!-- Loading screen container — shown while the game initializes, hidden once loading completes -->
+
         <h1 class="logo-text main-title">MASTER<span>MIND</span></h1>
+        <!-- Game logo text displayed during loading; "MIND" is wrapped in a span for different color styling -->
+
         <div class="progress-bar-container" style="width: 250px; margin-top: 30px;">
+            <!-- Container for the loading progress bar with fixed width and top margin -->
+
             <div class="progress-fill" id="loader-progress"></div>
+            <!-- The actual progress bar fill element — its width is dynamically updated by JavaScript to show loading progress -->
         </div>
     </div>
 
     <div id="app" class="hidden">
+        <!-- Main application container — starts hidden and becomes visible after the loader finishes -->
+
         <nav class="navbar">
+            <!-- Top navigation bar containing the logo, nav links, and user profile section -->
+
             <div class="nav-container">
+                <!-- Flex container that organizes navbar items horizontally -->
+
                 <div class="logo">
+                    <!-- Logo container in the navbar -->
+
                     <h1 class="logo-text">MASTER<span>MIND</span></h1>
+                    <!-- Smaller version of the game logo for the navigation bar -->
                 </div>
+
                 <div class="nav-links">
+                    <!-- Navigation links section — allows switching between different views/pages -->
+
                     <a href="#" class="nav-item active" data-view="home">Games</a>
+                    <!-- Games tab link — 'active' class highlights it as the current page; data-view attribute is used by JavaScript to route views -->
+
                     <a href="#" class="nav-item" data-view="leaderboard">Leaderboard</a>
+                    <!-- Leaderboard tab link — shows player statistics and rankings -->
+
                     <a href="#" class="nav-item" data-view="about">About</a>
+                    <!-- About tab link — shows information about the development team -->
+
                     <a href="#" class="nav-item" data-view="help">Help</a>
+                    <!-- Help tab link — shows game instructions and tips for each mini-game -->
                 </div>
+
                 <div class="user-profile">
+                    <!-- User profile section on the right side of the navbar -->
+
                     <div class="stats">
+                        <!-- Container for displaying the player's coin and star counts -->
+
                         <div class="stat-pill">🪙 <span id="coin-count">0</span></div>
+                        <!-- Displays the player's total coins; the span is updated dynamically by JavaScript -->
+
                         <div class="stat-pill">⭐ <span id="star-count">0</span></div>
+                        <!-- Displays the player's total stars; the span is updated dynamically by JavaScript -->
                     </div>
+
                     <button id="login-btn" class="btn-cta" style="padding: 8px 20px; width: auto;">Login</button>
+                    <!-- Login button — opens the authentication modal; hidden after the user logs in -->
+
                     <div id="user-info" class="hidden">
+                        <!-- User info display — hidden by default, shown after login to display the player's name and avatar -->
+
                         <span class="user-name" style="margin-right: 10px; font-weight: 600;"></span>
+                        <!-- Placeholder for the logged-in user's display name; filled by JavaScript after login -->
+
                         <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar"
                             style="width: 40px; border-radius: 50%;">
+                        <!-- User avatar image generated by DiceBear API; displayed as a circular 40px icon -->
                     </div>
                 </div>
             </div>
         </nav>
 
         <main id="main-content">
+            <!-- Main content area — dynamically updated by JavaScript to show different game views -->
+
             <!-- Dynamic Content Injected Here -->
+            <!-- JavaScript replaces the contents of this element when switching between Home, Games, About, Help, and Leaderboard views -->
+
             <section id="home-view" class="view">
+                <!-- Home view section — the default landing page showing all available game modes -->
+
                 <header class="hero" style="text-align: center; margin-bottom: 2rem;">
+                    <!-- Hero section at the top of the home page with centered text -->
+
                     <h2 class="sub-greeting">Mastering the Mind</h2>
+                    <!-- Main heading/tagline for the home page -->
+
                     <p>Select your challenge and reach new heights.</p>
+                    <!-- Subtitle encouraging the player to pick a game mode -->
                 </header>
 
                 <div class="mode-cards-row">
+                    <!-- Horizontal row of game mode selection cards — clicking one highlights it and shows its preview below -->
+
                     <button class="mode-card active" data-game="memory">
+                        <!-- Room Observer game card — 'active' class means it's selected by default; data-game identifies this card for JavaScript -->
+
                         <div class="mode-card-icon memory-icon">🏠</div>
+                        <!-- House emoji icon representing the Room Observer (spatial memory) game -->
+
                         <div class="mode-card-title">Room Observer</div>
+                        <!-- Game mode title displayed on the card -->
+
                         <div class="mode-card-sub">Spatial Memory</div>
+                        <!-- Short description of the cognitive skill this game trains -->
                     </button>
+
                     <button class="mode-card" data-game="f1">
+                        <!-- F1 Reflex game card — tests reaction speed -->
+
                         <div class="mode-card-icon f1-icon">🏎️</div>
+                        <!-- Racing car emoji representing the F1 reaction time game -->
+
                         <div class="mode-card-title">F1 Reflex</div>
+                        <!-- Game mode title -->
+
                         <div class="mode-card-sub">Reaction Speed</div>
+                        <!-- Cognitive skill trained -->
                     </button>
+
                     <button class="mode-card" data-game="schulte">
+                        <!-- Schulte Grid game card — tests visual perception and peripheral vision -->
+
                         <div class="mode-card-icon schulte-icon">🔢</div>
+                        <!-- Number emoji representing the Schulte Grid number-finding game -->
+
                         <div class="mode-card-title">Schulte Grid</div>
+                        <!-- Game mode title -->
+
                         <div class="mode-card-sub">Visual Perception</div>
+                        <!-- Cognitive skill trained -->
                     </button>
+
                     <button class="mode-card" data-game="confusion">
+                        <!-- Color Confusion game card — tests cognitive control via the Stroop Effect -->
+
                         <div class="mode-card-icon confusion-icon">🎨</div>
+                        <!-- Art palette emoji representing the Color Confusion (Stroop Effect) game -->
+
                         <div class="mode-card-title">Color Confusion</div>
+                        <!-- Game mode title -->
+
                         <div class="mode-card-sub">Stroop Effect</div>
+                        <!-- Cognitive skill trained -->
                     </button>
                 </div>
 
                 <div id="game-display-area" class="game-display-container">
+                    <!-- Container for the expanded game preview cards — shows details about the selected game mode -->
+
                     <!-- Specific game info/start will show here based on active tab -->
+                    <!-- Only one preview card is visible at a time; the rest are hidden -->
+
                     <div class="game-card-expanded active" id="memory-preview">
+                        <!-- Room Observer preview card — visible by default because memory is the default selected game -->
+
                         <div class="preview-visual memory">🏘️</div>
+                        <!-- Large visual emoji for the Room Observer game preview -->
+
                         <div class="preview-content">
+                            <!-- Text content area of the preview card -->
+
                             <h3>Room Observer</h3>
+                            <!-- Game title in the preview -->
+
                             <p>Challenge your spatial memory by observing 5 objects and their colors in just 10 seconds.
                                 Perfect for sharpening focus!</p>
+                            <!-- Description of how the Room Observer game works -->
+
                             <button class="btn-cta play-game-btn" data-game="memory">Play Game</button>
+                            <!-- Play button that launches the Room Observer game when clicked; data-game tells JavaScript which game to start -->
                         </div>
                     </div>
 
                     <div class="game-card-expanded hidden" id="f1-preview">
+                        <!-- F1 Reflex preview card — hidden by default, shown when F1 mode card is clicked -->
+
                         <div class="preview-visual f1">🏎️</div>
+                        <!-- Large visual emoji for the F1 game preview -->
+
                         <div class="preview-content">
                             <h3>F1 Reflex</h3>
+                            <!-- Game title -->
+
                             <p>Test your reaction speed against legendary F1 drivers. React as soon as the lights go
                                 out. Can you beat Verstappen?</p>
+                            <!-- Description of how the F1 Reflex game works -->
+
                             <button class="btn-cta play-game-btn" data-game="f1">Start Racing</button>
+                            <!-- Play button that launches the F1 Reflex game -->
                         </div>
                     </div>
 
                     <div class="game-card-expanded hidden" id="schulte-preview">
+                        <!-- Schulte Grid preview card — hidden by default -->
+
                         <div class="preview-visual schulte">🔢</div>
+                        <!-- Large visual emoji for the Schulte Grid game preview -->
+
                         <div class="preview-content">
                             <h3>Schulte Grid</h3>
+                            <!-- Game title -->
+
                             <p>Improve visual perception and peripheral vision. Find the numbers 1 to 25 in ascending
                                 order as fast as possible.</p>
+                            <!-- Description of how the Schulte Grid game works -->
+
                             <button class="btn-cta play-game-btn" data-game="schulte">Start Finding</button>
+                            <!-- Play button that launches the Schulte Grid game -->
                         </div>
                     </div>
 
                     <div class="game-card-expanded hidden" id="confusion-preview">
+                        <!-- Color Confusion preview card — hidden by default -->
+
                         <div class="preview-visual confusion">🎨</div>
+                        <!-- Large visual emoji for the Color Confusion game preview -->
+
                         <div class="preview-content">
                             <h3>Color Confusion</h3>
+                            <!-- Game title -->
+
                             <p>Master the Stroop Effect! Quickly identify either the physical color or the written text
                                 under intense time pressure.</p>
+                            <!-- Description of how the Color Confusion game works -->
+
                             <button class="btn-cta play-game-btn" data-game="confusion">Start Mixing</button>
+                            <!-- Play button that launches the Color Confusion game -->
                         </div>
                     </div>
                 </div>
@@ -127,29 +277,55 @@
     </div>
 
     <!-- Login Modal -->
+    <!-- Authentication popup that appears when the user clicks the Login button -->
+
     <div id="auth-modal" class="modal hidden">
+        <!-- Modal overlay container — hidden by default; shown when user clicks Login -->
+
         <div class="modal-overlay"></div>
+        <!-- Semi-transparent dark background behind the modal card to dim the page content -->
+
         <div class="game-overlay auth-card">
+            <!-- The actual login card with glassmorphism styling -->
+
             <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Welcome Back</h2>
+            <!-- Modal heading welcoming the user -->
+
             <p style="margin-bottom: 2rem; color: #718096;">Sign in to save your progress and compete globally.</p>
+            <!-- Subtitle explaining the benefit of logging in -->
 
             <div class="login-options">
+                <!-- Container for the social login buttons -->
+
                 <button id="google-login" class="btn-login google">
+                    <!-- Google login button — triggers the Google OAuth login flow -->
+
                     <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="Google">
+                    <!-- Google "G" logo icon -->
+
                     Continue with Google
+                    <!-- Button text -->
                 </button>
+
                 <button id="gmail-login" class="btn-login gmail">
+                    <!-- Gmail login button — alternative login option (both trigger the same handler) -->
+
                     <img src="https://cdn4.iconfinder.com/data/icons/logos-brands-in-colors/48/google-gmail-512.png"
                         alt="Gmail">
+                    <!-- Gmail envelope logo icon -->
+
                     Login with Gmail
+                    <!-- Button text -->
                 </button>
             </div>
 
             <button class="close-modal underline-btn">Maybe Later</button>
+            <!-- Close button to dismiss the login modal without signing in -->
         </div>
     </div>
 
     <script src="app.js"></script>
+    <!-- Loads the main game JavaScript file that contains all game logic, state management, sound engine, and UI rendering -->
 </body>
 
 </html>
