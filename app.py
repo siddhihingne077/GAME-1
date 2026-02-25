@@ -1,32 +1,33 @@
 from flask import Flask, jsonify, request, session, redirect, url_for, send_from_directory
-# Imports Flask framework and its utilities: jsonify (convert Python dicts to JSON responses), request (access incoming HTTP data), session (manage user sessions), redirect/url_for (navigation helpers), send_from_directory (serve static files)
+# Imports Flask framework and its utilities
 
 from flask_cors import CORS
-# Imports CORS (Cross-Origin Resource Sharing) to allow the frontend (running on a different port/origin) to communicate with this backend API
+# Imports CORS (Cross-Origin Resource Sharing)
 
 from flask_sqlalchemy import SQLAlchemy
-# Imports SQLAlchemy ORM (Object-Relational Mapping) to interact with the database using Python classes instead of raw SQL
+# Imports SQLAlchemy ORM
 
 import os
-# Imports the os module to access environment variables and interact with the operating system
+import json
+import requests as http_requests
+# http_requests is used for fetching Google's public keys during token verification
 
 from dotenv import load_dotenv
-# Imports load_dotenv to load environment variables from a .env file into the system environment
 
-import json
-# Imports the json module to serialize/deserialize JSON strings (used to store extra game data in the database)
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+# Google libraries for verifying the OAuth2 ID token sent from the frontend
 
 load_dotenv()
-# Loads environment variables from the .env file so they can be accessed via os.getenv()
 
 app = Flask(__name__)
-# Creates the Flask web application instance; __name__ tells Flask where to find templates and static files
-
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key")
-# Sets a secret key for session encryption; reads from environment variable or falls back to a default development key
 
-CORS(app)
-# Enables CORS on all routes so the frontend JavaScript can make API requests to this server without being blocked by browser security
+# Google OAuth Client ID
+GOOGLE_CLIENT_ID = "253566578017-e11j4dmmphh8pta941dgqftjpplbshs9.apps.googleusercontent.com"
+
+CORS(app, supports_credentials=True)
+# supports_credentials=True allows cookies/sessions to be sent cross-origin
 
 # Database Configuration
 # You can switch between SQLite, MySQL, or PostgreSQL
@@ -44,28 +45,15 @@ db = SQLAlchemy(app)
 
 # Models
 class User(db.Model):
-    # Defines the User database table/model — stores player account information
-
     id = db.Column(db.Integer, primary_key=True)
-    # Auto-incrementing unique identifier for each user (primary key)
-
     google_id = db.Column(db.String(100), unique=True, nullable=True)
-    # Stores the user's Google OAuth ID for social login; unique and optional
-
     username = db.Column(db.String(80), unique=True, nullable=False)
-    # The player's display name; must be unique and cannot be empty
-
     email = db.Column(db.String(120), unique=True, nullable=False)
-    # The player's email address; must be unique and cannot be empty
-
+    picture = db.Column(db.String(500), nullable=True)
+    # Google profile picture URL
     coins = db.Column(db.Integer, default=0)
-    # In-game currency earned by playing games; starts at 0
-
     stars = db.Column(db.Integer, default=0)
-    # Star rating currency earned based on game performance; starts at 0
-
     progress = db.relationship('GameProgress', backref='user', lazy=True)
-    # Creates a one-to-many relationship: one User can have many GameProgress records; 'backref' allows accessing the user from a progress record
 
 class GameProgress(db.Model):
     # Defines the GameProgress database table — stores per-game statistics for each user
@@ -90,52 +78,122 @@ class GameProgress(db.Model):
 
 # Routes
 @app.route('/')
-# Defines the root URL route — when someone visits the homepage
 def index():
-    # Handler function for the root URL
     return send_from_directory('.', 'index.html')
-    # Serves the index.html file from the current directory as the game's frontend
 
-@app.route('/api/login', methods=['POST'])
-# Defines the login API endpoint; accepts only POST requests with user credentials
-def login():
-    # Handler function for user login/registration
+# ── Google OAuth Callback ─────────────────────────────────
+@app.route('/auth/google/callback', methods=['POST'])
+def google_callback():
+    """Receives a Google ID token from the frontend, verifies it,
+       and creates or finds the corresponding user."""
     data = request.json
-    # Parses the incoming JSON request body into a Python dictionary
+    token = data.get('credential')
+    if not token:
+        return jsonify({"status": "error", "message": "No credential provided"}), 400
 
-    email = data.get('email')
-    # Extracts the email from the request data
+    try:
+        # Verify the Google ID token using Google's public keys
+        idinfo = id_token.verify_oauth2_token(
+            token, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
 
-    username = data.get('username', 'Master Player')
-    # Extracts the username; defaults to 'Master Player' if not provided
+        google_id = idinfo['sub']        # Unique Google user ID
+        email     = idinfo['email']      # User's email
+        name      = idinfo.get('name', email.split('@')[0])  # Display name
+        picture   = idinfo.get('picture', '')                 # Profile photo URL
 
-    google_id = data.get('google_id')
-    # Extracts the optional Google OAuth ID
+    except ValueError:
+        return jsonify({"status": "error", "message": "Invalid Google token"}), 401
 
-    user = User.query.filter_by(email=email).first()
-    # Searches the database for an existing user with this email address
-
+    # Find existing user by google_id or email, or create a new one
+    user = User.query.filter_by(google_id=google_id).first()
     if not user:
-        # If no user exists with this email, create a new account
-        user = User(email=email, username=username, google_id=google_id)
-        # Creates a new User object with the provided details
+        user = User.query.filter_by(email=email).first()
 
+    if user:
+        # Update existing user with latest Google data
+        user.google_id = google_id
+        user.username = name
+        user.picture = picture
+    else:
+        # Create brand-new user
+        user = User(google_id=google_id, email=email, username=name, picture=picture)
         db.session.add(user)
-        # Stages the new user to be added to the database
 
-        db.session.commit()
-        # Saves (commits) the new user to the database permanently
+    db.session.commit()
+
+    # Store user ID in server-side session for persistence
+    session['user_id'] = user.id
 
     return jsonify({
         "status": "success",
         "user": {
             "id": user.id,
             "username": user.username,
+            "email": user.email,
+            "picture": user.picture,
             "coins": user.coins,
             "stars": user.stars
         }
     })
-    # Returns a JSON response with the user's profile data (id, username, coins, stars) to the frontend
+
+# ── Session Check ─────────────────────────────────────────
+@app.route('/api/me', methods=['GET'])
+def get_me():
+    """Returns the currently logged-in user from the Flask session,
+       so the frontend can restore the session on page load."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"status": "not_logged_in"}), 200
+
+    user = db.session.get(User, user_id)
+    if not user:
+        session.pop('user_id', None)
+        return jsonify({"status": "not_logged_in"}), 200
+
+    return jsonify({
+        "status": "success",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "picture": user.picture,
+            "coins": user.coins,
+            "stars": user.stars
+        }
+    })
+
+# ── Logout ────────────────────────────────────────────────
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """Clears the server-side session, logging the user out."""
+    session.pop('user_id', None)
+    return jsonify({"status": "success"})
+
+# ── Legacy login (kept as fallback for offline mode) ──────
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.json
+    email = data.get('email')
+    username = data.get('username', 'Master Player')
+    google_id = data.get('google_id')
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        user = User(email=email, username=username, google_id=google_id)
+        db.session.add(user)
+        db.session.commit()
+    session['user_id'] = user.id
+    return jsonify({
+        "status": "success",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "picture": getattr(user, 'picture', None),
+            "coins": user.coins,
+            "stars": user.stars
+        }
+    })
 
 @app.route('/api/save-progress', methods=['POST'])
 # Defines the save-progress API endpoint; accepts POST requests to save game results
