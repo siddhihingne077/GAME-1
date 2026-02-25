@@ -1581,11 +1581,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderAbout() {
         const developers = [
             { name: 'Siddhi', role: 'Lead Developer', seed: 'Siddhi', color: 'var(--golden-yellow)' },
-            { name: 'Yaksh', role: 'Co-Developer', seed: 'Yaksh', color: 'var(--pastel-green, #a8e6cf)', customImg: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberKnight&eyes=robocop' },
-            { name: 'Rudra', role: 'Co-Developer', seed: 'Rudra', color: 'var(--pastel-green, #a8e6cf)', customImg: 'https://api.dicebear.com/7.x/bottts/svg?seed=WebHacker&eyes=eva&mouth=grill03&baseColor=00e676' },
-            { name: 'Mayuri', role: 'Collaborator', seed: 'Mayuri', color: 'var(--pastel-blue, #a8d8ea)' },
-            { name: 'Sakshi', role: 'Collaborator', seed: 'Sakshi', color: 'var(--pastel-blue, #a8d8ea)' },
-            { name: 'Madhuri', role: 'Collaborator', seed: 'Madhuri', color: 'var(--pastel-blue, #a8d8ea)' },
+            { name: 'Yaksh', role: 'Co-Developer', seed: 'Yaksh', color: '#1B5E20', customImg: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberKnight&eyes=robocop' },
+            { name: 'Rudra', role: 'Co-Developer', seed: 'Rudra', color: '#1B5E20', customImg: 'https://api.dicebear.com/7.x/bottts/svg?seed=WebHacker&eyes=eva&mouth=grill03&baseColor=00e676' },
+            { name: 'Mayuri', role: 'Collaborator', seed: 'Mayuri', color: '#0D47A1' },
+            { name: 'Sakshi', role: 'Collaborator', seed: 'Sakshi', color: '#0D47A1' },
+            { name: 'Madhuri', role: 'Collaborator', seed: 'Madhuri', color: '#0D47A1' },
         ];
 
         const devCards = developers.map(dev => {
@@ -1613,6 +1613,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:1rem; margin-bottom:2rem;">
                         ${devCards}
                     </div>
+
+                    <hr style="margin:1.5rem 0; opacity:0.1;">
+
+                    <h3 style="margin-bottom:1rem; font-size:2rem; color: #000000; font-weight: 800; text-transform: capitalize;">Why Master Mind</h3>
+                    <p style="line-height:1.9; margin-bottom:2rem; color: #000000; font-size: 1.15rem; font-weight: 500;">
+                        Master Mind is a multi-game brain training platform designed to test and improve cognitive skills like memory, reflexes, observation, focus, and logical thinking. It features four engaging mini-games — Room Observer, F1 Reflex, Shuffle Grid, and Stroop Effect: Color Confusion — each targeting a different aspect of mental performance. Players challenge their speed, accuracy, and concentration while competing to improve their scores.
+                    </p>
 
                     <hr style="margin:1.5rem 0; opacity:0.1;">
 
