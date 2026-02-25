@@ -2,133 +2,158 @@
  * Master Mind - Core Application Logic
  * Features: Tabs, 3 Games, Back/Home nav, localStorage persistence per game
  */
+// Main JavaScript file that powers the entire Master Mind game — contains all game logic, UI rendering, sound engine, and state management
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Waits for the entire HTML page to finish loading before running any game code — prevents errors from accessing elements that don't exist yet
 
     /* =============================================
        PERSISTENT STORAGE — per-game data in localStorage
        ============================================= */
+    // DB object handles saving and loading all game progress to the browser's localStorage so data persists between sessions
     const DB = {
         load() {
+            // Loads saved game data from localStorage, or returns default starting values if no save exists
             return JSON.parse(localStorage.getItem('mastermind_data') || 'null') || {
-                coins: 0,
-                stars: 0,
-                memory: { level: 1, highScore: 0, gamesPlayed: 0, levelsCompleted: 0, hasFailedCurrent: false },
-                f1: { bestTime: null, gamesPlayed: 0 },
-                schulte: { bestTimes: { '3x3': null, '4x4': null, '5x5': null, '6x6': null }, gamesPlayed: 0 },
-                confusion: { bestScores: { endless: 0, survival: 0, speed: 0 }, gamesPlayed: 0 }
+                // Parses the stored JSON string back into a JavaScript object; falls back to default data structure if nothing is saved
+                coins: 0, // Starting in-game currency
+                stars: 0, // Starting star rating currency
+                memory: { level: 1, highScore: 0, gamesPlayed: 0, levelsCompleted: 0, hasFailedCurrent: false }, // Room Observer game defaults
+                f1: { bestTime: null, gamesPlayed: 0 }, // F1 Reflex game defaults — null means no best time recorded yet
+                schulte: { bestTimes: { '3x3': null, '4x4': null, '5x5': null, '6x6': null }, gamesPlayed: 0 }, // Schulte Grid defaults with per-size best times
+                confusion: { bestScores: { endless: 0, survival: 0, speed: 0 }, gamesPlayed: 0 } // Color Confusion defaults with per-mode best scores
             };
         },
         save(data) {
+            // Saves the entire game state to localStorage as a JSON string so it persists after closing the browser
             localStorage.setItem('mastermind_data', JSON.stringify(data));
         }
     };
 
     const API_URL = 'http://127.0.0.1:5000/api';
+    // Base URL for the Flask backend API — all server requests are sent to this address
 
     // Live state (loaded from DB on startup)
+    // The central state object holds ALL game data in memory — loaded from localStorage on startup
     const state = {
         user: JSON.parse(localStorage.getItem('mastermind_user') || 'null'),
+        // Loads the logged-in user's profile from localStorage (null if not logged in)
         currentView: 'home',
+        // Tracks which page/view is currently displayed (home, about, help, leaderboard)
         currentGame: null,
+        // Tracks which game is currently active (memory, f1, schulte, confusion) or null if on home screen
         currentStage: 'home', // 'home' | 'lobby' | 'playing'
+        // Tracks the navigation depth within a game: home → lobby → playing
         activeInterval: null,
+        // Stores the ID of any active setInterval timer so it can be cleared when navigating away
         ...DB.load()
+        // Spreads all saved game data (coins, stars, memory, f1, schulte, confusion) into the state object
     };
 
     /* =============================================
        SOUND ENGINE — Web Audio API synthesizer
        ============================================= */
     const SoundEngine = (() => {
-        let ctx = null;
-        let muted = false;
-        let activeOscillators = [];
-        let bgGain = null;
-        let bgOscillators = [];
-        let bgPlaying = false;
-        let heartbeatInterval = null;
-        let bgInterval = null;
-        let bgStep = 0;
+        // Self-executing function (IIFE) that creates the sound engine with private variables — handles all game audio using Web Audio API
+        let ctx = null; // Web Audio API context — created lazily on first sound play
+        let muted = false; // Whether sound is currently muted
+        let activeOscillators = []; // Tracks all playing sound oscillators so they can be stopped
+        let bgGain = null; // Gain node for background music volume control
+        let bgOscillators = []; // Tracks background music oscillators separately
+        let bgPlaying = false; // Whether background music is currently playing
+        let heartbeatInterval = null; // Interval ID for the looping heartbeat sound (used in timer urgency)
+        let bgInterval = null; // Interval ID for the background music note sequence
+        let bgStep = 0; // Current position in the background music note sequence
 
         function getCtx() {
+            // Gets or creates the Web Audio API context — needed before any sound can play
             if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+            // Creates a new AudioContext (webkitAudioContext for older Safari browsers)
             if (ctx.state === 'suspended') ctx.resume();
+            // Resumes the context if it was suspended (browsers require user interaction before playing audio)
             return ctx;
         }
 
         function osc(type, freq, duration, volume = 0.1, rampFreq = null) {
-            if (muted) return;
+            // Helper function to play a single tone — creates an oscillator with optional frequency ramping
+            if (muted) return; // Don't play anything if sound is muted
             try {
-                const c = getCtx();
-                const o = c.createOscillator();
-                const g = c.createGain();
-                o.type = type;
-                o.frequency.setValueAtTime(freq, c.currentTime);
+                const c = getCtx(); // Get the audio context
+                const o = c.createOscillator(); // Create a sound wave generator
+                const g = c.createGain(); // Create a volume controller
+                o.type = type; // Set the wave shape (sine, sawtooth, square, triangle) — each sounds different
+                o.frequency.setValueAtTime(freq, c.currentTime); // Set the starting pitch frequency in Hz
                 if (rampFreq !== null) o.frequency.exponentialRampToValueAtTime(rampFreq, c.currentTime + duration);
-                g.gain.setValueAtTime(volume, c.currentTime);
+                // If rampFreq is specified, smoothly slide the pitch from freq to rampFreq over the duration (creates sweeping effects)
+                g.gain.setValueAtTime(volume, c.currentTime); // Set the starting volume
                 g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration);
-                o.connect(g);
-                g.connect(c.destination);
-                o.start(c.currentTime);
-                o.stop(c.currentTime + duration);
-                activeOscillators.push(o);
+                // Fade the volume to near-silence over the duration (natural decay effect)
+                o.connect(g); // Connect oscillator → gain node (sound goes through volume control)
+                g.connect(c.destination); // Connect gain → speakers (sends sound to output)
+                o.start(c.currentTime); // Start playing the tone immediately
+                o.stop(c.currentTime + duration); // Schedule the tone to stop after the specified duration
+                activeOscillators.push(o); // Track this oscillator so it can be force-stopped if needed
                 o.onended = () => { activeOscillators = activeOscillators.filter(x => x !== o); };
-            } catch (e) { }
+                // When the tone finishes, remove it from the tracking array to free memory
+            } catch (e) { } // Silently catch any audio errors (e.g., if audio isn't supported)
         }
 
         return {
-            get muted() { return muted; },
+            // Public API returned by the SoundEngine IIFE — these methods can be called from game code
+            get muted() { return muted; }, // Getter that returns the current mute state
             toggleMute() {
-                muted = !muted;
-                if (muted) this.stopAll();
-                return muted;
+                // Toggles sound on/off; stops all active sounds when muting
+                muted = !muted; // Flip the mute flag
+                if (muted) this.stopAll(); // If now muted, immediately stop all playing sounds
+                return muted; // Return the new mute state
             },
 
-            // Short crisp click
-            click() { osc('sine', 1000, 0.05, 0.08); },
+            // Short crisp click — played when any button is pressed throughout the game
+            click() { osc('sine', 1000, 0.05, 0.08); }, // 1000Hz sine wave, 50ms, low volume
 
-            // Pleasant ascending tone
+            // Pleasant ascending tone — played when the player answers a question correctly
             correct() {
-                if (muted) return;
+                if (muted) return; // Skip if muted
                 try {
                     const c = getCtx();
                     const t = c.currentTime;
-                    // Two quick ascending notes
+                    // Two quick ascending notes (C5=523Hz, G5=784Hz) create a cheerful "ding-ding" reward sound
                     [523, 784].forEach((f, i) => {
                         const o = c.createOscillator();
                         const g = c.createGain();
-                        o.type = 'sine';
-                        o.frequency.setValueAtTime(f, t);
-                        g.gain.setValueAtTime(0.12, t + i * 0.08);
-                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.12);
-                        o.connect(g); g.connect(c.destination);
-                        o.start(t + i * 0.08);
-                        o.stop(t + i * 0.08 + 0.12);
+                        o.type = 'sine'; // Pure sine wave for a clean, pleasant tone
+                        o.frequency.setValueAtTime(f, t); // Set pitch to the note frequency
+                        g.gain.setValueAtTime(0.12, t + i * 0.08); // Start each note 80ms apart
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.12); // Quick fade out
+                        o.connect(g); g.connect(c.destination); // Route to speakers
+                        o.start(t + i * 0.08); // Stagger the start of each note by 80ms
+                        o.stop(t + i * 0.08 + 0.12); // Each note lasts 120ms
                         activeOscillators.push(o);
                         o.onended = () => { activeOscillators = activeOscillators.filter(x => x !== o); };
                     });
                 } catch (e) { }
             },
 
-            // Descending buzzer
-            wrong() { osc('sawtooth', 200, 0.25, 0.1); },
+            // Descending buzzer — played when the player gives a wrong answer
+            wrong() { osc('sawtooth', 200, 0.25, 0.1); }, // Sawtooth wave at low 200Hz creates a harsh buzzer sound
 
-            // Timer tick
-            tick() { osc('sine', 800, 0.03, 0.06); },
+            // Timer tick — short soft tick played every second during countdown timers
+            tick() { osc('sine', 800, 0.03, 0.06); }, // 800Hz for 30ms — creates a subtle clock-tick effect
 
-            // Double heartbeat thump
+            // Double heartbeat thump — creates urgency when timer is about to expire
             heartbeat() {
                 if (muted) return;
                 try {
                     const c = getCtx();
                     const t = c.currentTime;
                     [0, 0.15].forEach(delay => {
+                        // Two thumps 150ms apart simulate a "lub-dub" heartbeat rhythm
                         const o = c.createOscillator();
                         const g = c.createGain();
                         o.type = 'sine';
-                        o.frequency.setValueAtTime(60, t + delay);
-                        g.gain.setValueAtTime(0.2, t + delay);
-                        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.15);
+                        o.frequency.setValueAtTime(60, t + delay); // Very low 60Hz creates a deep chest-thump feeling
+                        g.gain.setValueAtTime(0.2, t + delay); // Moderate volume for impact
+                        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.15); // Quick fade
                         o.connect(g); g.connect(c.destination);
                         o.start(t + delay);
                         o.stop(t + delay + 0.15);
@@ -138,42 +163,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (e) { }
             },
 
-            // Start a looping heartbeat (for timers about to end)
+            // Start a looping heartbeat — called when timer drops to 3 seconds or less
             startHeartbeatLoop() {
-                if (heartbeatInterval) return;
-                this.heartbeat();
-                heartbeatInterval = setInterval(() => this.heartbeat(), 800);
+                if (heartbeatInterval) return; // Don't start multiple loops
+                this.heartbeat(); // Play immediately
+                heartbeatInterval = setInterval(() => this.heartbeat(), 800); // Then repeat every 800ms
             },
             stopHeartbeatLoop() {
+                // Stops the heartbeat loop when the timer phase ends
                 if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
             },
 
-            // F1 light beep
-            lightBeep() { osc('sine', 440, 0.1, 0.1); },
+            // F1 light beep — played when each red light turns on during the F1 race countdown
+            lightBeep() { osc('sine', 440, 0.1, 0.1); }, // A4 note (440Hz) for 100ms
 
-            // F1 GO burst
-            goBurst() { osc('sine', 1200, 0.3, 0.15, 600); },
+            // F1 GO burst — played when all lights go out and the player can react
+            goBurst() { osc('sine', 1200, 0.3, 0.15, 600); }, // High pitch sweeping down from 1200Hz to 600Hz
 
-            // False start warning
-            falseStart() { osc('square', 150, 0.5, 0.12); },
+            // False start warning — played when the player presses too early in F1 Reflex
+            falseStart() { osc('square', 150, 0.5, 0.12); }, // Harsh square wave buzzer at low frequency
 
-            // Level complete fanfare (C-E-G-C arpeggio)
+            // Level complete fanfare (C-E-G-C arpeggio) — celebratory sound played when the player beats a level
             fanfare() {
                 if (muted) return;
                 try {
                     const c = getCtx();
                     const t = c.currentTime;
                     [523, 659, 784, 1047].forEach((f, i) => {
+                        // Plays C5-E5-G5-C6 notes in sequence — a classic victory arpeggio
                         const o = c.createOscillator();
                         const g = c.createGain();
                         o.type = 'sine';
-                        o.frequency.setValueAtTime(f, t);
-                        g.gain.setValueAtTime(0, t);
-                        g.gain.linearRampToValueAtTime(0.12, t + i * 0.12 + 0.01);
-                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.2);
+                        o.frequency.setValueAtTime(f, t); // Set each note's pitch
+                        g.gain.setValueAtTime(0, t); // Start silent
+                        g.gain.linearRampToValueAtTime(0.12, t + i * 0.12 + 0.01); // Quick fade in
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.2); // Smooth fade out
                         o.connect(g); g.connect(c.destination);
-                        o.start(t + i * 0.12);
-                        o.stop(t + i * 0.12 + 0.2);
+                        o.start(t + i * 0.12); // Each note starts 120ms after the previous
+                        o.stop(t + i * 0.12 + 0.2); // Each note lasts 200ms
                         activeOscillators.push(o);
                         o.onended = () => { activeOscillators = activeOscillators.filter(x => x !== o); };
                     });
@@ -181,333 +208,363 @@ document.addEventListener('DOMContentLoaded', () => {
             },
 
             // Background ambient music — dual mode (lobby vs suspense)
+            // Lobby: soothing guitar-pluck arpeggio for menus; Suspense: slow sine-wave pulses for tense gameplay
             startBgMusic(type = 'lobby') {
-                if (muted) return;
+                if (muted) return; // Don't play if muted
                 // If already playing the same type, ignore. Otherwise stop and switch.
-                if (bgPlaying && this.currentMusicType === type) return;
-                if (bgPlaying) this.stopBgMusic();
+                if (bgPlaying && this.currentMusicType === type) return; // Already playing this type
+                if (bgPlaying) this.stopBgMusic(); // Stop current music before switching types
 
                 try {
                     const c = getCtx();
-                    bgPlaying = true;
-                    this.currentMusicType = type;
-                    bgStep = 0;
+                    bgPlaying = true; // Flag that background music is active
+                    this.currentMusicType = type; // Remember which type is playing
+                    bgStep = 0; // Reset the note sequence position
 
+                    // Lobby music: C major → G major → A minor → F major chord progression
                     const lobbySequence = [
-                        130.81, 164.81, 196.00, 261.63, // Cmaj
-                        98.00, 146.83, 196.00, 246.94,  // Gmaj
-                        110.00, 164.81, 220.00, 261.63, // Am
-                        87.31, 130.81, 196.00, 220.00   // Fmaj
+                        130.81, 164.81, 196.00, 261.63, // Cmaj arpeggio notes
+                        98.00, 146.83, 196.00, 246.94,  // Gmaj arpeggio notes
+                        110.00, 164.81, 220.00, 261.63, // Am arpeggio notes
+                        87.31, 130.81, 196.00, 220.00   // Fmaj arpeggio notes
                     ];
 
-                    // Soothing Suspense: A-minor based tension
+                    // Soothing Suspense: A-minor based tension — deeper, slower notes for in-game atmosphere
                     const suspenseSequence = [
-                        55.00, 82.41,  // Bass pulses (A1, E2)
-                        110.00, 130.81, // A2, C3
-                        55.00, 73.42,  // A1, D2
-                        110.00, 146.83  // A2, D3
+                        55.00, 82.41,  // Bass pulses (A1, E2) — deep rumbling foundation
+                        110.00, 130.81, // A2, C3 — mid-range tension
+                        55.00, 73.42,  // A1, D2 — returning to bass
+                        110.00, 146.83  // A2, D3 — rising tension
                     ];
 
                     const sequence = type === 'lobby' ? lobbySequence : suspenseSequence;
+                    // Selects the note sequence based on the music type
                     const interval = type === 'lobby' ? 250 : 1500; // Fast for lobby arpeggio, slow for suspense
+                    // Lobby plays notes every 250ms (upbeat feel); Suspense plays every 1500ms (slow, tense feel)
 
                     const playNote = () => {
-                        if (muted || !bgPlaying) return;
+                        // Inner function that plays one note from the sequence and advances to the next
+                        if (muted || !bgPlaying) return; // Stop if muted or music was stopped
                         const freq = sequence[bgStep % sequence.length];
+                        // Gets the current note frequency, looping back to the start when the sequence ends
 
                         const playGuitarPluck = (f, vol, dcy) => {
+                            // Simulates an acoustic guitar pluck sound using multiple oscillators + noise burst
                             // Main string sound (Triangle for acoustic feel)
                             const o = c.createOscillator();
                             const g = c.createGain();
-                            o.type = 'triangle';
-                            o.frequency.setValueAtTime(f, c.currentTime);
+                            o.type = 'triangle'; // Triangle wave mimics the warm tone of a plucked guitar string
+                            o.frequency.setValueAtTime(f, c.currentTime); // Set the note pitch
 
-                            // Harmonic (one octave up, quieter)
+                            // Harmonic (one octave up, quieter) — adds brightness to the pluck
                             const oh = c.createOscillator();
                             const gh = c.createGain();
-                            oh.type = 'triangle';
-                            oh.frequency.setValueAtTime(f * 2, c.currentTime);
+                            oh.type = 'triangle'; // Same wave type for consistency
+                            oh.frequency.setValueAtTime(f * 2, c.currentTime); // Double the frequency for one octave higher
 
-                            // Envelope: Shorter attack for "plucked" feel
-                            const attack = 0.01;
-                            g.gain.setValueAtTime(0, c.currentTime);
-                            g.gain.linearRampToValueAtTime(vol, c.currentTime + attack);
-                            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dcy);
+                            // Envelope: Shorter attack for "plucked" feel — fast start, gradual decay
+                            const attack = 0.01; // 10ms attack time — very fast, like a string being snapped
+                            g.gain.setValueAtTime(0, c.currentTime); // Start silent
+                            g.gain.linearRampToValueAtTime(vol, c.currentTime + attack); // Quick volume rise
+                            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dcy); // Slow natural decay
 
-                            gh.gain.setValueAtTime(0, c.currentTime);
-                            gh.gain.linearRampToValueAtTime(vol * 0.4, c.currentTime + attack);
-                            gh.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dcy * 0.8);
+                            gh.gain.setValueAtTime(0, c.currentTime); // Harmonic starts silent too
+                            gh.gain.linearRampToValueAtTime(vol * 0.4, c.currentTime + attack); // Harmonic is 40% volume of fundamental
+                            gh.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dcy * 0.8); // Harmonic decays faster than the fundamental
 
-                            // Subtle pluck noise (white noise burst)
-                            const bufSize = c.sampleRate * 0.02;
-                            const buffer = c.createBuffer(1, bufSize, c.sampleRate);
-                            const data = buffer.getChannelData(0);
+                            // Subtle pluck noise (white noise burst) — simulates the initial "attack" of a guitar pick
+                            const bufSize = c.sampleRate * 0.02; // 20ms of samples
+                            const buffer = c.createBuffer(1, bufSize, c.sampleRate); // Single-channel audio buffer
+                            const data = buffer.getChannelData(0); // Get the raw audio sample array
                             for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-                            const noise = c.createBufferSource();
-                            const nGain = c.createGain();
-                            noise.buffer = buffer;
-                            nGain.gain.setValueAtTime(vol * 0.2, c.currentTime);
-                            nGain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.02);
+                            // Fill with random values between -1 and 1 (white noise) to simulate pick attack
+                            const noise = c.createBufferSource(); // Source node to play the noise buffer
+                            const nGain = c.createGain(); // Volume control for the noise
+                            noise.buffer = buffer; // Assign the noise samples
+                            nGain.gain.setValueAtTime(vol * 0.2, c.currentTime); // Noise is 20% of the main volume
+                            nGain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.02); // Fade out in 20ms
 
-                            o.connect(g); g.connect(c.destination);
-                            oh.connect(gh); gh.connect(c.destination);
-                            noise.connect(nGain); nGain.connect(c.destination);
+                            o.connect(g); g.connect(c.destination); // Route fundamental to speakers
+                            oh.connect(gh); gh.connect(c.destination); // Route harmonic to speakers
+                            noise.connect(nGain); nGain.connect(c.destination); // Route noise burst to speakers
 
-                            o.start(c.currentTime); o.stop(c.currentTime + dcy);
-                            oh.start(c.currentTime); oh.stop(c.currentTime + dcy);
-                            noise.start(c.currentTime);
+                            o.start(c.currentTime); o.stop(c.currentTime + dcy); // Play fundamental for full decay
+                            oh.start(c.currentTime); oh.stop(c.currentTime + dcy); // Play harmonic for full decay
+                            noise.start(c.currentTime); // Play noise burst (auto-stops when buffer ends)
 
-                            bgOscillators.push(o, oh);
+                            bgOscillators.push(o, oh); // Track both oscillators for cleanup
                             o.onended = () => { bgOscillators = bgOscillators.filter(x => x !== o && x !== oh); };
+                            // Remove from tracking when done
                         };
 
                         if (type === 'lobby') {
-                            playGuitarPluck(freq, 0.04, 3.0);
+                            playGuitarPluck(freq, 0.04, 3.0); // Lobby: play a soft guitar pluck with 3s decay
                         } else {
-                            // Suspense mode remains as-is (sine waves, slower pulse)
+                            // Suspense mode: slow sine-wave drones for tense in-game atmosphere
                             const o = c.createOscillator();
                             const g = c.createGain();
-                            o.type = 'sine';
-                            o.frequency.setValueAtTime(freq, c.currentTime);
+                            o.type = 'sine'; // Pure sine for smooth, haunting tones
+                            o.frequency.setValueAtTime(freq, c.currentTime); // Set the bass note pitch
 
                             if (bgStep % 4 === 0) {
+                                // Every 4th note, add a high shimmer overlay for ethereal effect
                                 const highO = c.createOscillator();
                                 const highG = c.createGain();
                                 highO.type = 'sine';
-                                highO.frequency.setValueAtTime(freq * 4, c.currentTime);
-                                highG.gain.setValueAtTime(0, c.currentTime);
-                                highG.gain.linearRampToValueAtTime(0.015, c.currentTime + 1.0);
-                                highG.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 4.0);
+                                highO.frequency.setValueAtTime(freq * 4, c.currentTime); // 2 octaves up for shimmer
+                                highG.gain.setValueAtTime(0, c.currentTime); // Start silent
+                                highG.gain.linearRampToValueAtTime(0.015, c.currentTime + 1.0); // Slow 1s fade in
+                                highG.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 4.0); // 4s total decay
                                 highO.connect(highG); highG.connect(c.destination);
                                 highO.start(c.currentTime); highO.stop(c.currentTime + 4.0);
                             }
 
-                            g.gain.setValueAtTime(0, c.currentTime);
-                            g.gain.linearRampToValueAtTime(0.05, c.currentTime + 0.2);
-                            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 4.0);
+                            g.gain.setValueAtTime(0, c.currentTime); // Start silent
+                            g.gain.linearRampToValueAtTime(0.05, c.currentTime + 0.2); // Gentle 200ms fade in
+                            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 4.0); // Long 4s decay
                             o.connect(g); g.connect(c.destination);
                             o.start(c.currentTime); o.stop(c.currentTime + 4.0);
-                            bgOscillators.push(o);
+                            bgOscillators.push(o); // Track for cleanup
                             o.onended = () => { bgOscillators = bgOscillators.filter(x => x !== o); };
                         }
 
-                        bgStep++;
+                        bgStep++; // Advance to the next note in the sequence
                     };
 
-                    playNote();
-                    bgInterval = setInterval(playNote, interval);
-                } catch (e) { }
+                    playNote(); // Play the first note immediately
+                    bgInterval = setInterval(playNote, interval); // Schedule subsequent notes at the set interval
+                } catch (e) { } // Silently catch any audio errors
             },
             stopBgMusic() {
-                if (bgInterval) { clearInterval(bgInterval); bgInterval = null; }
-                bgOscillators.forEach(o => { try { o.stop(); } catch (e) { } });
-                bgOscillators = [];
-                bgPlaying = false;
-                this.currentMusicType = null;
+                // Stops all background music and cleans up oscillators
+                if (bgInterval) { clearInterval(bgInterval); bgInterval = null; } // Stop the note scheduler
+                bgOscillators.forEach(o => { try { o.stop(); } catch (e) { } }); // Force-stop all playing notes
+                bgOscillators = []; // Clear the tracking array
+                bgPlaying = false; // Mark music as stopped
+                this.currentMusicType = null; // Reset the music type
             },
 
-            // Kill everything
+            // Kill everything — stops all sounds, heartbeat, and background music at once
             stopAll() {
-                this.stopHeartbeatLoop();
-                this.stopBgMusic();
-                activeOscillators.forEach(o => { try { o.stop(); } catch (e) { } });
-                activeOscillators = [];
+                this.stopHeartbeatLoop(); // Stop heartbeat if playing
+                this.stopBgMusic(); // Stop background music
+                activeOscillators.forEach(o => { try { o.stop(); } catch (e) { } }); // Stop all sound effects
+                activeOscillators = []; // Clear the effects tracking array
             }
         };
-    })();
+    })(); // Immediately invoked — SoundEngine is ready to use right away
 
     async function syncScore(gameType, score, level = 1, extraData = {}) {
-        if (!state.user) return;
+        // Sends the player's game results to the Flask backend for server-side storage and leaderboard tracking
+        if (!state.user) return; // Can't sync if not logged in
         try {
             const response = await fetch(`${API_URL}/save-progress`, {
+                // POST request to the save-progress API endpoint
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    user_id: state.user.id,
-                    game_type: gameType,
-                    score: score,
-                    level: level,
+                    user_id: state.user.id, // Which user is submitting
+                    game_type: gameType, // Which game was played
+                    score: score, // The score achieved
+                    level: level, // The level played (mainly for Room Observer)
                     coins_gained: gameType === 'memory' ? (score >= Math.ceil(5 * 0.6) ? 1 : 0) : (gameType === 'f1' ? 20 : (gameType === 'schulte' ? 30 : Math.floor(score / 10))),
+                    // Calculates coins earned: Memory=1 coin if passed, F1=20 coins, Schulte=30 coins, Confusion=score/10
                     stars_gained: gameType === 'memory' ? (score === 5 ? 3 : (score >= 4 ? 2 : (score >= 3 ? 1 : 0))) : (gameType === 'schulte' ? 2 : (gameType === 'confusion' ? Math.floor(score / 5) : 0)),
-                    extra_data: extraData
+                    // Calculates stars earned: Memory=1-3 stars based on score, Schulte=2 stars, Confusion=score/5
+                    extra_data: extraData // Additional game-specific data (rank, mode, etc.)
                 })
             });
-            const data = await response.json();
+            const data = await response.json(); // Parse the server response
             if (data.status === 'success') {
-                state.coins = data.coins;
-                state.stars = data.stars;
-                updateNavStats();
-                DB.save(state);
+                state.coins = data.coins; // Update local coin count with server value
+                state.stars = data.stars; // Update local star count with server value
+                updateNavStats(); // Refresh the navbar display
+                DB.save(state); // Save the updated state to localStorage
             }
         } catch (e) {
-            console.error("Backend sync failed:", e);
+            console.error("Backend sync failed:", e); // Log the error but don't crash the game
         }
     }
 
     /* =============================================
-       DOM REFS
+       DOM REFS — cached references to frequently used HTML elements
        ============================================= */
-    const loader = document.getElementById('loader');
-    const app = document.getElementById('app');
-    const mainContent = document.getElementById('main-content');
-    const loginBtn = document.getElementById('login-btn');
-    const authModal = document.getElementById('auth-modal');
-    const googleLogin = document.getElementById('google-login');
+    const loader = document.getElementById('loader'); // Loading screen container
+    const app = document.getElementById('app'); // Main app container (hidden during loading)
+    const mainContent = document.getElementById('main-content'); // Dynamic content area where game views are rendered
+    const loginBtn = document.getElementById('login-btn'); // Login button in the navbar
+    const authModal = document.getElementById('auth-modal'); // Login modal popup
+    const googleLogin = document.getElementById('google-login'); // Google login button inside the modal
 
     /* =============================================
-       INIT
+       INIT — runs once when the page loads
        ============================================= */
-    init();
+    init(); // Call the initialization function immediately
 
     function init() {
-        updateNavStats();
+        // Sets up the initial state of the game: loading bar, user session, and event listeners
+        updateNavStats(); // Display current coins/stars in the navbar
 
-        let progress = 0;
-        const progressFill = document.getElementById('loader-progress');
+        let progress = 0; // Loading bar progress percentage (0-100)
+        const progressFill = document.getElementById('loader-progress'); // The loading bar fill element
         const interval = setInterval(() => {
-            progress += Math.random() * 30;
+            // Simulates a loading bar by incrementing progress at random speeds every 200ms
+            progress += Math.random() * 30; // Add a random amount (0-30%) each tick for natural feel
             if (progress >= 100) {
-                progress = 100;
-                clearInterval(interval);
-                hideLoader();
+                progress = 100; // Cap at 100%
+                clearInterval(interval); // Stop the loading simulation
+                hideLoader(); // Transition from loading screen to the main app
             }
-            if (progressFill) progressFill.style.width = `${progress}%`;
-        }, 200);
+            if (progressFill) progressFill.style.width = `${progress}%`; // Update the visual width of the progress bar
+        }, 200); // Run every 200ms
 
         if (state.user) {
-            loginBtn.classList.add('hidden');
+            // If a user is already logged in (from a previous session), show their profile instead of the Login button
+            loginBtn.classList.add('hidden'); // Hide the Login button
             const userInfo = document.getElementById('user-info');
-            userInfo.classList.remove('hidden');
+            userInfo.classList.remove('hidden'); // Show the user info section
             const nameEl = userInfo.querySelector('.user-name');
-            if (nameEl) nameEl.textContent = state.user.username;
+            if (nameEl) nameEl.textContent = state.user.username; // Display the user's name
         }
 
-        setupEventListeners();
+        setupEventListeners(); // Attach all click handlers and navigation listeners
     }
 
     function hideLoader() {
+        // Fades out the loading screen and reveals the main app with entry animations
         gsap.to(loader, {
-            opacity: 0, duration: 0.8,
+            opacity: 0, duration: 0.8, // Fade out loader over 0.8 seconds
             onComplete: () => {
-                loader.classList.add('hidden');
-                app.classList.remove('hidden');
-                gsap.from('.hero', { opacity: 0, y: 30, duration: 1 });
+                // After fade completes:
+                loader.classList.add('hidden'); // Remove loader from view
+                app.classList.remove('hidden'); // Show the main app
+                gsap.from('.hero', { opacity: 0, y: 30, duration: 1 }); // Animate hero section sliding up
                 gsap.from('.game-card-expanded', { opacity: 0, y: 30, duration: 1, stagger: 0.2, delay: 0.3 });
+                // Animate game cards sliding up with staggered delay for a cascading entrance effect
             }
         });
     }
 
     function updateNavStats() {
+        // Updates the coin and star displays in the navigation bar to reflect current state
         const coinEl = document.getElementById('coin-count');
         const starEl = document.getElementById('star-count');
-        if (coinEl) coinEl.textContent = state.coins;
-        if (starEl) starEl.textContent = state.stars;
+        if (coinEl) coinEl.textContent = state.coins; // Set the displayed coin count
+        if (starEl) starEl.textContent = state.stars; // Set the displayed star count
     }
 
     /* =============================================
-       EVENT LISTENERS
+       EVENT LISTENERS — sets up all interactive behaviors
        ============================================= */
     function setupEventListeners() {
-        // Global click sound for all buttons
+        // Attaches all click handlers for navigation, game selection, and authentication
+
+        // Global click sound for all buttons — plays a subtle click on any button press
         document.addEventListener('click', (e) => {
-            if (e.target.closest('button')) {
-                SoundEngine.click();
+            if (e.target.closest('button')) { // Check if the clicked element is a button (or inside one)
+                SoundEngine.click(); // Play the click sound effect
             }
         });
 
-        // Navbar links
+        // Navbar links — handles switching between Home, Leaderboard, About, and Help views
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', e => {
-                e.preventDefault();
-                switchView(item.getAttribute('data-view'));
+                e.preventDefault(); // Prevent the default link behavior (page jump)
+                switchView(item.getAttribute('data-view')); // Switch to the view specified in data-view attribute
             });
         });
 
-        // Game Mode Card Switching
+        // Game Mode Card Switching — handles clicking between Room Observer, F1 Reflex, Schulte, Color Confusion
         document.querySelectorAll('.mode-card').forEach(btn => {
             btn.addEventListener('click', () => {
-                const gameId = btn.getAttribute('data-game');
-                document.querySelectorAll('.mode-card').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
+                const gameId = btn.getAttribute('data-game'); // Get which game was clicked
+                document.querySelectorAll('.mode-card').forEach(b => b.classList.remove('active')); // Deactivate all cards
+                btn.classList.add('active'); // Highlight the clicked card
                 document.querySelectorAll('.game-card-expanded').forEach(card => {
-                    card.classList.add('hidden');
+                    card.classList.add('hidden'); // Hide all preview cards
                     card.classList.remove('active');
                 });
-                const preview = document.getElementById(`${gameId}-preview`);
+                const preview = document.getElementById(`${gameId}-preview`); // Find the matching preview card
                 if (preview) {
-                    preview.classList.remove('hidden');
+                    preview.classList.remove('hidden'); // Show the selected game's preview
                     preview.classList.add('active');
                 }
             });
         });
 
-        // Play buttons on home tab cards
+        // Play buttons on home tab cards — launches the selected game
         document.querySelectorAll('.play-game-btn').forEach(btn => {
             btn.addEventListener('click', () => startGame(btn.getAttribute('data-game')));
+            // Starts the game identified by the button's data-game attribute
         });
 
-        // Auth
-        loginBtn.addEventListener('click', () => authModal.classList.remove('hidden'));
-        document.querySelector('.close-modal').addEventListener('click', () => authModal.classList.add('hidden'));
-        googleLogin.addEventListener('click', handleGoogleLogin);
-        document.getElementById('gmail-login').addEventListener('click', handleGoogleLogin);
+        // Auth — login/modal event handlers
+        loginBtn.addEventListener('click', () => authModal.classList.remove('hidden')); // Open login modal
+        document.querySelector('.close-modal').addEventListener('click', () => authModal.classList.add('hidden')); // Close login modal
+        googleLogin.addEventListener('click', handleGoogleLogin); // Google login button handler
+        document.getElementById('gmail-login').addEventListener('click', handleGoogleLogin); // Gmail login button handler (same function)
     }
 
     /* =============================================
-       VIEW ROUTING
+       VIEW ROUTING — handles switching between the main pages
        ============================================= */
     function switchView(view) {
-        if (state.activeInterval) clearInterval(state.activeInterval);
-        state.currentView = view;
-        state.currentGame = null;
-        state.currentStage = 'home';
+        // Switches the main content area to show a different page (home, about, help, leaderboard)
+        if (state.activeInterval) clearInterval(state.activeInterval); // Stop any running game timers
+        state.currentView = view; // Update the current view tracker
+        state.currentGame = null; // Clear any active game
+        state.currentStage = 'home'; // Reset to home stage
 
+        // Update navbar to highlight the active tab
         document.querySelectorAll('.nav-item').forEach(item => {
             item.classList.toggle('active', item.getAttribute('data-view') === view);
+            // Adds 'active' class to the matching nav item, removes from others
         });
 
         if (view === 'home') {
-            goBack();
+            goBack(); // Renders the home view with game cards
         } else if (view === 'about') {
-            renderAbout();
+            renderAbout(); // Renders the About page with team info
         } else if (view === 'help') {
-            renderHelp();
+            renderHelp(); // Renders the Help page with game instructions
         } else if (view === 'leaderboard') {
-            renderLeaderboard();
+            renderLeaderboard(); // Renders the Leaderboard/Stats page
         } else {
             mainContent.innerHTML = `<div class='view'><h2>${view.charAt(0).toUpperCase() + view.slice(1)} Coming Soon</h2></div>`;
+            // Fallback: shows a "Coming Soon" message for any unimplemented views
         }
     }
 
     function goBack() {
+        // Handles the "Back" navigation: goes from playing→lobby, lobby→home, or stays home
         // Stop all sounds when navigating away
         SoundEngine.stopAll();
-        // Sequential navigation logic
+        // Sequential navigation logic — checks current game and stage to determine where to go back to
         if (state.currentGame === 'memory' && state.currentStage === 'playing') {
-            SoundEngine.startBgMusic('lobby');
-            if (state.activeInterval) clearInterval(state.activeInterval);
-            initMemoryLobby();
+            SoundEngine.startBgMusic('lobby'); // Switch back to lobby music
+            if (state.activeInterval) clearInterval(state.activeInterval); // Stop any game timers
+            initMemoryLobby(); // Go back to the Room Observer lobby screen
             return;
         }
         if (state.currentGame === 'schulte' && state.currentStage === 'playing') {
             SoundEngine.startBgMusic('lobby');
             if (state.activeInterval) clearInterval(state.activeInterval);
-            initSchulteGame();
+            initSchulteGame(); // Go back to Schulte Grid size selection
             return;
         }
         if (state.currentGame === 'confusion' && state.currentStage === 'playing') {
             SoundEngine.startBgMusic('lobby');
             if (state.activeInterval) clearInterval(state.activeInterval);
-            initConfusionGame();
+            initConfusionGame(); // Go back to Color Confusion mode selection
             return;
         }
 
         // Returns to home tab selection (game lobby) without page reload
-        if (state.activeInterval) clearInterval(state.activeInterval);
+        if (state.activeInterval) clearInterval(state.activeInterval); // Stop any remaining timers
         SoundEngine.stopBgMusic(); // Stop music when at home screen
-        state.currentGame = null;
-        state.currentView = 'home';
-        state.currentStage = 'home';
+        state.currentGame = null; // Clear the active game
+        state.currentView = 'home'; // Set the view to home
+        state.currentStage = 'home'; // Set the stage to home
 
         // Reset nav active states
         document.querySelectorAll('.nav-item').forEach(item => {
@@ -609,9 +666,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* =============================================
-       GAME TOOLBAR — Back button injected into every game
+       GAME TOOLBAR — Back button and mute toggle injected into every game screen
        ============================================= */
     function gameToolbar(gameTitle) {
+        // Returns HTML string for the top toolbar with a Back button, game title, and mute toggle
         return `
             <div class="game-toolbar">
                 <button class="toolbar-btn" id="btn-back" onclick="">
@@ -623,77 +681,82 @@ document.addEventListener('DOMContentLoaded', () => {
                 </button>
             </div>
         `;
+        // The toolbar shows: left arrow + "Back" button, centered game title, and a speaker/mute icon button
     }
 
     function attachToolbarListeners() {
+        // Attaches click handlers to the Back and Mute buttons in the game toolbar
         const backBtn = document.getElementById('btn-back');
-        if (backBtn) backBtn.addEventListener('click', goBack);
+        if (backBtn) backBtn.addEventListener('click', goBack); // Back button triggers the goBack navigation function
         const muteBtn = document.getElementById('btn-mute');
         if (muteBtn) muteBtn.addEventListener('click', () => {
-            const nowMuted = SoundEngine.toggleMute();
-            muteBtn.textContent = nowMuted ? '🔇' : '🔊';
+            const nowMuted = SoundEngine.toggleMute(); // Toggle the mute state
+            muteBtn.textContent = nowMuted ? '🔇' : '🔊'; // Update the icon to reflect current state
         });
     }
 
     /* =============================================
-       AUTH
+       AUTH — handles user login via Google/Gmail
        ============================================= */
     async function handleGoogleLogin() {
+        // Sends a login request to the backend and updates the UI with the user's profile
         try {
             const response = await fetch(`${API_URL}/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    email: 'player@example.com',
-                    username: 'Master Player'
+                    email: 'player@example.com', // Demo email (in production, this comes from Google OAuth)
+                    username: 'Master Player' // Demo username
                 })
             });
-            const data = await response.json();
+            const data = await response.json(); // Parse the server response
             if (data.status === 'success') {
-                state.user = data.user;
-                localStorage.setItem('mastermind_user', JSON.stringify(state.user));
-                state.coins = data.user.coins;
-                state.stars = data.user.stars;
+                state.user = data.user; // Store the user profile in state
+                localStorage.setItem('mastermind_user', JSON.stringify(state.user)); // Persist to localStorage
+                state.coins = data.user.coins; // Update coins from server
+                state.stars = data.user.stars; // Update stars from server
 
-                loginBtn.classList.add('hidden');
+                loginBtn.classList.add('hidden'); // Hide the Login button
                 const userInfo = document.getElementById('user-info');
-                userInfo.classList.remove('hidden');
-                userInfo.querySelector('.user-name').textContent = state.user.username;
-                authModal.classList.add('hidden');
-                updateNavStats();
-                showToast(`✅ Logged in as ${state.user.username}!`);
+                userInfo.classList.remove('hidden'); // Show the user info section
+                userInfo.querySelector('.user-name').textContent = state.user.username; // Display username
+                authModal.classList.add('hidden'); // Close the login modal
+                updateNavStats(); // Refresh navbar coin/star display
+                showToast(`✅ Logged in as ${state.user.username}!`); // Show success notification
             }
         } catch (e) {
-            // Fallback for offline
+            // Fallback for offline — creates a local-only user so the game still works without a server
             state.user = { id: 1, username: 'Master Player' };
             loginBtn.classList.add('hidden');
             document.getElementById('user-info').classList.remove('hidden');
             authModal.classList.add('hidden');
-            showToast('⚠️ Offline Mode: Logged in locally');
+            showToast('⚠️ Offline Mode: Logged in locally'); // Notify user they're playing offline
         }
     }
 
     /* =============================================
-       TOAST NOTIFICATION
+       TOAST NOTIFICATION — brief popup messages at the bottom of the screen
        ============================================= */
     function showToast(msg) {
-        const toast = document.createElement('div');
-        toast.className = 'toast-msg';
-        toast.textContent = msg;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.classList.add('show'), 10);
+        // Creates a temporary toast notification that appears, stays for 3 seconds, then fades away
+        const toast = document.createElement('div'); // Create a new div element
+        toast.className = 'toast-msg'; // Apply the toast styling class
+        toast.textContent = msg; // Set the message text
+        document.body.appendChild(toast); // Add the toast to the page
+        setTimeout(() => toast.classList.add('show'), 10); // Trigger the CSS fade-in animation (small delay for transition to work)
         setTimeout(() => {
-            toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 400);
-        }, 3000);
+            toast.classList.remove('show'); // Start the CSS fade-out animation
+            setTimeout(() => toast.remove(), 400); // Remove the element from DOM after fade-out completes
+        }, 3000); // Keep the toast visible for 3 seconds
     }
 
     /* =============================================
-       RESULT CARD (replaces alert popups)
+       RESULT CARD — fullscreen overlay showing game results (replaces alert popups)
        ============================================= */
     function showResultCard({ icon, title, subtitle, details = [], onPrimary, primaryLabel, onSecondary, secondaryLabel }) {
+        // Creates a styled fullscreen results overlay with stats, and action buttons to replay or go back
         const card = document.createElement('div');
-        card.className = 'result-overlay';
+        card.className = 'result-overlay'; // Fullscreen overlay container
         card.innerHTML = `
             <div class="result-card">
                 <div class="result-icon">${icon}</div>
@@ -708,31 +771,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
         `;
-        document.body.appendChild(card);
-        setTimeout(() => card.classList.add('show'), 10);
+        // Builds the result card with: icon, title, subtitle, stat details grid, and action buttons
+        document.body.appendChild(card); // Add the overlay to the page
+        setTimeout(() => card.classList.add('show'), 10); // Trigger fade-in animation
 
         document.getElementById('res-primary').addEventListener('click', () => {
-            card.remove();
-            onPrimary();
+            card.remove(); // Remove the overlay
+            onPrimary(); // Execute the primary action (e.g., next level, replay)
         });
         if (secondaryLabel) {
             document.getElementById('res-secondary').addEventListener('click', () => {
-                card.remove();
-                onSecondary();
+                card.remove(); // Remove the overlay
+                onSecondary(); // Execute the secondary action (e.g., go back to menu)
             });
         }
     }
 
     /* =============================================
-       GAME DISPATCHER
+       GAME DISPATCHER — routes to the correct game initializer
        ============================================= */
     function startGame(gameId) {
-        state.currentGame = gameId;
-        SoundEngine.startBgMusic(); // Start background atmosphere
-        if (gameId === 'memory') initMemoryLobby();
-        else if (gameId === 'f1') initF1Game();
-        else if (gameId === 'schulte') initSchulteGame();
-        else if (gameId === 'confusion') initConfusionGame();
+        // Launches the selected game based on the game ID
+        state.currentGame = gameId; // Track which game is now active
+        SoundEngine.startBgMusic(); // Start background atmosphere music
+        if (gameId === 'memory') initMemoryLobby(); // Launch Room Observer lobby
+        else if (gameId === 'f1') initF1Game(); // Launch F1 Reflex
+        else if (gameId === 'schulte') initSchulteGame(); // Launch Schulte Grid size selector
+        else if (gameId === 'confusion') initConfusionGame(); // Launch Color Confusion mode selector
     }
 
     /* =============================================
@@ -798,6 +863,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Colour → CSS hex used for bullet dots and colour-chips in the question card
+    // Maps color names to their hex codes for rendering colored elements in the game UI
     const COLOR_HEX = {
         Red: '#ef4444', Blue: '#3b82f6', Green: '#22c55e',
         Yellow: '#eab308', Purple: '#a855f7', Orange: '#f97316',
@@ -807,22 +873,24 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function getRoomTheme(level) {
-        const index = Math.floor((level - 1) / 50);
+        // Returns a CSS background style based on the current level — changes every 50 levels for visual variety
+        const index = Math.floor((level - 1) / 50); // Calculate which theme tier (0-5) based on level
         const themes = [
-            '#f8fafc', // Default Slate 50
-            'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', // Midnight
-            'linear-gradient(135deg, #4b6cb7 0%, #182848 100%)', // Ocean
-            'linear-gradient(135deg, #0f2027 0%, #2c5364 100%)', // Emerald
-            'linear-gradient(135deg, #373b44 0%, #4286f4 100%)', // Electric
-            'linear-gradient(135deg, #833ab4 0%, #fd1d1d 100%)' // Sunset
+            '#f8fafc', // Default light gray (levels 1-50)
+            'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', // Midnight dark blue (levels 51-100)
+            'linear-gradient(135deg, #4b6cb7 0%, #182848 100%)', // Ocean blue (levels 101-150)
+            'linear-gradient(135deg, #0f2027 0%, #2c5364 100%)', // Emerald teal (levels 151-200)
+            'linear-gradient(135deg, #373b44 0%, #4286f4 100%)', // Electric blue (levels 201-250)
+            'linear-gradient(135deg, #833ab4 0%, #fd1d1d 100%)' // Sunset purple-red (levels 251-300)
         ];
-        return themes[index] || themes[0];
+        return themes[index] || themes[0]; // Return the theme for the current tier, defaulting to the first
     }
 
     function initMemoryLobby() {
-        SoundEngine.startBgMusic('lobby');
-        const memData = state.memory;
-        state.currentStage = 'lobby';
+        // Renders the Room Observer lobby screen with stats, shop items, and the Play button
+        SoundEngine.startBgMusic('lobby'); // Play lobby background music
+        const memData = state.memory; // Get the player's Room Observer save data
+        state.currentStage = 'lobby'; // Set navigation stage to lobby (Back goes to home)
         mainContent.innerHTML = `
             ${gameToolbar('Room Observer')}
             <div class="view ro-root ro-lobby-container" style="background: ${getRoomTheme(memData.level)}; border-radius: 0;">
@@ -901,41 +969,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initMemoryGame() {
-        SoundEngine.startBgMusic('lobby');
+        // Initializes and runs a Room Observer game round: shows objects to memorize, then asks questions
+        SoundEngine.startBgMusic('lobby'); // Keep lobby music during gameplay
         const memData = state.memory;
-        let level = memData.level;
-        state.currentStage = 'playing';
+        let level = memData.level; // Current player level
+        state.currentStage = 'playing'; // Set stage to playing (Back goes to lobby)
 
         // Dynamic difficulty: Base 5 objects, 10 seconds.
-        // Every 5 levels: +1 object, +2 seconds.
-        const difficultyStep = Math.floor((level - 1) / 5);
-        let objectCount = Math.min(12, 5 + difficultyStep); // Max 12 objects
-        let timerSeconds = 10 + (difficultyStep * 2);
+        // Every 5 levels: +1 object to memorize, +2 seconds observation time.
+        const difficultyStep = Math.floor((level - 1) / 5); // Calculate difficulty tier
+        let objectCount = Math.min(12, 5 + difficultyStep); // More objects as level increases, max 12
+        let timerSeconds = 10 + (difficultyStep * 2); // More time as objects increase
 
-        // Level 300: Grand Level
+        // Level 300: Grand Level — the ultimate challenge
         const isGrandLevel = level === 300;
         if (isGrandLevel) {
-            objectCount = 12; // Maximum challenge
-            timerSeconds = 30; // More time for the final madness
+            objectCount = 12; // Maximum number of objects to memorize
+            timerSeconds = 30; // Extra time for the final level
         }
 
-        // Setup boosters
+        // Setup boosters — apply any purchased power-ups
         const activeBoosts = memData.activeBoosts || [];
-        let extraSeconds = activeBoosts.includes('time') ? 5 : 0;
-        memData.activeBoosts = []; // Clear for next run
+        let extraSeconds = activeBoosts.includes('time') ? 5 : 0; // Time Boost adds 5 seconds
+        memData.activeBoosts = []; // Clear boosts after use — they're one-time use
 
-        timerSeconds += extraSeconds;
-        const totalTime = timerSeconds;
+        timerSeconds += extraSeconds; // Add boost time to total
+        const totalTime = timerSeconds; // Save original time for progress bar calculation
 
-        const colorNames = Object.keys(COLOR_HEX);
-        const objectNames = Object.keys(OBJECT_DATA);
+        const colorNames = Object.keys(COLOR_HEX); // Get all available color names
+        const objectNames = Object.keys(OBJECT_DATA); // Get all available object names
 
-        // Build a unique set of room objects
-        const shuffled = [...objectNames].sort(() => Math.random() - 0.5);
+        // Build a unique set of room objects with random colors
+        const shuffled = [...objectNames].sort(() => Math.random() - 0.5); // Shuffle all object names randomly
         const roomObjects = shuffled.slice(0, Math.min(objectCount, objectNames.length)).map(name => ({
-            name,
-            color: colorNames[Math.floor(Math.random() * colorNames.length)]
+            name, // Object name (e.g., "Flower", "Phone")
+            color: colorNames[Math.floor(Math.random() * colorNames.length)] // Assign a random color
         }));
+        // Creates an array of objects, each with a name and random color, for the player to memorize
 
         mainContent.innerHTML = `
             ${gameToolbar('Room Observer')}
@@ -1020,94 +1090,108 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showMemoryQuestions(roomObjects, level, activeBoosts) {
+        // After the observation timer ends, this function shows questions asking the player what colors the objects were
         const observationRoom = document.getElementById('observation-room');
         const controls = document.getElementById('game-controls');
         const qText = document.getElementById('question-text');
         const ansBtns = document.getElementById('answer-buttons');
         const qProgress = document.getElementById('q-progress');
         const qIconBg = document.getElementById('question-icon-bg');
+        // Get references to all the question UI elements
 
-        if (observationRoom) observationRoom.classList.add('hidden');
+        if (observationRoom) observationRoom.classList.add('hidden'); // Hide the object cards (memorization phase is over)
         const timerCapsule = document.getElementById('timer-capsule');
         const progressBar = document.getElementById('timer-progress')?.parentElement;
-        if (timerCapsule) timerCapsule.style.display = 'none';
-        if (progressBar) progressBar.style.display = 'none';
-        if (controls) controls.classList.remove('hidden');
+        if (timerCapsule) timerCapsule.style.display = 'none'; // Hide the countdown timer
+        if (progressBar) progressBar.style.display = 'none'; // Hide the progress bar
+        if (controls) controls.classList.remove('hidden'); // Show the question panel
 
-        let currentQIdx = 0, score = 0;
-        let hasShield = activeBoosts.includes('shield');
+        let currentQIdx = 0, score = 0; // Track the current question and the player's correct answers
+        let hasShield = activeBoosts.includes('shield'); // Check if the player has a Shield Boost active
 
-        // Randomize question sequence — each object once
+        // Randomize question sequence — each object is asked about once, in random order
         const questionSequence = [...roomObjects].sort(() => Math.random() - 0.5);
-        const totalQs = questionSequence.length;
+        const totalQs = questionSequence.length; // Total number of questions equals total objects
 
         const ask = () => {
-            const currentObj = questionSequence[currentQIdx];
-            const objData = OBJECT_DATA[currentObj.name];
+            // Displays one question at a time and handles the player's answer
+            const currentObj = questionSequence[currentQIdx]; // Get the current object to ask about
+            const objData = OBJECT_DATA[currentObj.name]; // Get the SVG icon data for this object
 
-            if (qIconBg) qIconBg.innerHTML = objData.svg;
+            if (qIconBg) qIconBg.innerHTML = objData.svg; // Display the object's icon in the question card
             qText.innerHTML = `What color was the <span class="ro-highlight">${currentObj.name}</span>?`;
+            // Ask "What color was the [object name]?" with highlighted styling
             if (qProgress) qProgress.textContent = `Question ${currentQIdx + 1} / ${totalQs}`;
+            // Show progress like "Question 3 / 5"
 
-            ansBtns.innerHTML = '';
+            ansBtns.innerHTML = ''; // Clear previous answer buttons
 
-            // Generate pool of 4 options (correct + 3 random)
-            const colorNames = Object.keys(COLOR_HEX);
+            // Generate pool of 4 options (correct + 3 random distractors)
+            const colorNames = Object.keys(COLOR_HEX); // All possible color choices
             const distractors = colorNames.filter(c => c !== currentObj.color).sort(() => Math.random() - 0.5).slice(0, 3);
+            // Pick 3 random wrong answers (excluding the correct color)
             const pool = [currentObj.color, ...distractors].sort(() => Math.random() - 0.5);
+            // Combine correct answer + distractors and shuffle them
 
             pool.forEach(opt => {
-                const hex = COLOR_HEX[opt];
+                // Create a button for each answer option
+                const hex = COLOR_HEX[opt]; // Get the hex color for the visual dot
                 const btn = document.createElement('button');
                 btn.className = 'ro-answer-btn';
                 btn.innerHTML = `<span class="ro-answer-dot" style="background:${hex};"></span>${opt}`;
+                // Each button shows a colored dot + color name
                 btn.addEventListener('click', () => {
-                    const correct = opt === currentObj.color;
+                    const correct = opt === currentObj.color; // Check if this option matches the correct color
                     if (correct) {
-                        score++;
-                        btn.classList.add('correct');
-                        SoundEngine.correct();
+                        score++; // Increase score for correct answers
+                        btn.classList.add('correct'); // Green highlight
+                        SoundEngine.correct(); // Play success sound
                     } else {
                         if (hasShield) {
-                            hasShield = false;
+                            // Shield Boost: forgives one wrong answer by treating it as correct
+                            hasShield = false; // Use up the shield
                             score++; // Grant point as shield usage
                             btn.classList.add('correct');
                             SoundEngine.correct();
-                            showToast('🛡️ Shield protected you!');
+                            showToast('🛡️ Shield protected you!'); // Notify player
                         } else {
-                            btn.classList.add('wrong');
-                            SoundEngine.wrong();
+                            btn.classList.add('wrong'); // Red highlight for wrong answer
+                            SoundEngine.wrong(); // Play error sound
                             ansBtns.querySelectorAll('.ro-answer-btn').forEach(b => {
                                 if (b.textContent.trim() === currentObj.color) b.classList.add('correct');
+                                // Highlight the correct answer so the player can learn
                             });
                         }
                     }
 
                     ansBtns.querySelectorAll('.ro-answer-btn').forEach(b => b.disabled = true);
-                    currentQIdx++;
+                    // Disable all buttons after answering to prevent multiple clicks
+                    currentQIdx++; // Move to the next question
 
                     setTimeout(() => {
-                        if (currentQIdx < totalQs) ask();
-                        else finishMemoryLevel(score, totalQs, level);
+                        if (currentQIdx < totalQs) ask(); // Show next question after 800ms delay
+                        else finishMemoryLevel(score, totalQs, level); // All questions answered — show results
                     }, 800);
                 });
-                ansBtns.appendChild(btn);
+                ansBtns.appendChild(btn); // Add the button to the answer container
             });
 
             gsap.from('.ro-answer-btn', { opacity: 0, x: -20, stagger: 0.05, duration: 0.4 });
+            // Animate answer buttons sliding in from the left with a stagger effect
         };
-        ask();
+        ask(); // Start the first question
     }
 
     function finishMemoryLevel(score, totalQs, level) {
-        const success = score >= Math.ceil(totalQs * 0.6); // Minimum 60% (3/5) to clear
+        // Called after all questions are answered — determines if the player passed and awards rewards
+        const success = score >= Math.ceil(totalQs * 0.6); // Player needs 60% correct to pass (e.g., 3/5)
         const memData = state.memory;
-        const points = score * 10 * level;
+        const points = score * 10 * level; // Points scale with level — higher levels give more points per correct answer
 
-        let starsEarned = 0;
-        if (score >= 5) starsEarned = 3;
-        else if (score === 4) starsEarned = 2;
-        else if (score === 3) starsEarned = 1;
+        let starsEarned = 0; // Stars based on accuracy
+        if (score >= 5) starsEarned = 3; // Perfect: 3 stars
+        else if (score === 4) starsEarned = 2; // Great: 2 stars
+        else if (score === 3) starsEarned = 1; // Good: 1 star
 
         let coinsEarned = 0;
         if (success) {
@@ -1150,7 +1234,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: 'Total Stars', value: `${state.stars || 0} ⭐` }
             ],
             primaryLabel: success ? 'Next Level ▶' : 'Replay Level 🔄',
-            onPrimary: () => initMemoryGame()
+            onPrimary: () => initMemoryGame(),
+            secondaryLabel: 'Back to Lobby 🏠',
+            onSecondary: () => initMemoryLobby()
         });
     }
 
@@ -1204,28 +1290,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         /* ── Reset UI for a new race ── */
         function raceAgain() {
-            // Clean up any pending timers
+            // Resets the F1 game UI to its initial state for another race attempt
+            // Clean up any pending timers from the previous race
             if (raceTimeout) { clearTimeout(raceTimeout); raceTimeout = null; }
             if (lightInterval) { clearInterval(lightInterval); lightInterval = null; }
 
-            document.getElementById('f1-result')?.classList.add('hidden');
+            document.getElementById('f1-result')?.classList.add('hidden'); // Hide previous results
             const startBtn = document.getElementById('start-f1');
             const hintEl = document.getElementById('space-hint');
-            if (startBtn) startBtn.style.display = '';
+            if (startBtn) startBtn.style.display = ''; // Show the Start button again
             if (hintEl) { hintEl.style.display = ''; hintEl.textContent = '⌨️ Press SPACEBAR to start'; }
             [1, 2, 3, 4, 5].forEach(i => document.getElementById(`light-${i}`)?.classList.remove('on'));
+            // Turn off all 5 lights by removing the 'on' class
             const statusEl = document.getElementById('f1-status');
             if (statusEl) { statusEl.textContent = ''; statusEl.style.color = ''; }
-            document.getElementById('react-btn')?.classList.add('hidden');
+            // Clear the status message
+            document.getElementById('react-btn')?.classList.add('hidden'); // Hide the REACT button
 
-            f1State = 'idle';
+            f1State = 'idle'; // Reset the state machine to idle
         }
 
         /* ── Core: Start the race (lights sequence → GO) ── */
         function handleStartRace() {
-            if (f1State !== 'idle') return;
+            // Begins the F1 race sequence: turns on lights one by one, then turns them off after a random delay
+            if (f1State !== 'idle') return; // Only start from idle state
             SoundEngine.startBgMusic('lobby');
-            f1State = 'waiting';
+            f1State = 'waiting'; // Transition to waiting state (lights are turning on)
 
             const startBtn = document.getElementById('start-f1');
             const statusEl = document.getElementById('f1-status');
@@ -1339,16 +1429,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showF1Result(time, replayCallback) {
+        // Displays the F1 Reflex results: player's time, rank against famous F1 drivers, and replay option
         const f1Data = state.f1;
-        f1Data.gamesPlayed++;
+        f1Data.gamesPlayed++; // Increment total games played
 
         const isNewBest = f1Data.bestTime === null || time < f1Data.bestTime;
-        if (isNewBest) f1Data.bestTime = time;
+        // Check if this is the player's fastest time ever
+        if (isNewBest) f1Data.bestTime = time; // Update the stored best time
 
-        DB.save(state);
-        updateNavStats();
-        SoundEngine.fanfare();
+        DB.save(state); // Persist to localStorage
+        updateNavStats(); // Refresh the navbar display
+        SoundEngine.fanfare(); // Play the victory fanfare sound
 
+        // Famous F1 drivers and their "benchmark" reaction times for comparison
         const drivers = [
             { name: 'Ayrton Senna', time: 175 },
             { name: 'Michael Schumacher', time: 180 },
@@ -1358,11 +1451,11 @@ document.addEventListener('DOMContentLoaded', () => {
             { name: 'Lando Norris', time: 210 },
             { name: 'George Russell', time: 215 }
         ];
-        drivers.push({ name: '⭐ YOU', time });
-        drivers.sort((a, b) => a.time - b.time);
-        const rank = drivers.findIndex(d => d.name === '⭐ YOU') + 1;
+        drivers.push({ name: '⭐ YOU', time }); // Add the player's time to the leaderboard
+        drivers.sort((a, b) => a.time - b.time); // Sort by fastest time (ascending)
+        const rank = drivers.findIndex(d => d.name === '⭐ YOU') + 1; // Find the player's position
 
-        // Sync with backend
+        // Sync with backend for server-side leaderboard
         syncScore('f1', time, 1, { rank });
 
         const resultDiv = document.getElementById('f1-result');
@@ -1404,34 +1497,41 @@ document.addEventListener('DOMContentLoaded', () => {
        Data: bestTimes (per size), gamesPlayed
        ============================================= */
 
-    // Migrate old flat bestTime to new bestTimes object
+    // Migrate old flat bestTime to new bestTimes object (backwards compatibility)
     (function migrateSchulteState() {
+        // Auto-migration: converts old single bestTime to the new per-size bestTimes format
         const s = state.schulte;
         if (!s.bestTimes) {
             s.bestTimes = { '3x3': null, '4x4': null, '5x5': null, '6x6': null };
+            // Create the new structure with null (no best time) for each grid size
             if (s.bestTime != null) s.bestTimes['5x5'] = s.bestTime;
-            delete s.bestTime;
-            DB.save(state);
+            // Preserve any existing best time under the 5x5 category
+            delete s.bestTime; // Remove the old field
+            DB.save(state); // Save the migrated data
         }
-    })();
+    })(); // Runs immediately on load
 
     (function migrateConfusionState() {
+        // Auto-migration: converts old single highScore to the new per-mode bestScores format
         const c = state.confusion;
         if (!c.bestScores) {
             c.bestScores = { endless: 0, survival: 0, speed: 0 };
+            // Create the new structure with 0 for each game mode
             if (c.highScore != null) c.bestScores.endless = c.highScore;
-            delete c.highScore;
-            DB.save(state);
+            // Preserve any existing high score under the endless mode
+            delete c.highScore; // Remove the old field
+            DB.save(state); // Save the migrated data
         }
-    })();
+    })(); // Runs immediately on load
 
     function initSchulteGame() {
-        SoundEngine.startBgMusic('lobby');
-        const schData = state.schulte;
-        state.currentStage = 'lobby';
+        // Renders the Schulte Grid size selection screen where the player picks 3x3, 4x4, 5x5, or 6x6
+        SoundEngine.startBgMusic('lobby'); // Play lobby music
+        const schData = state.schulte; // Get Schulte save data
+        state.currentStage = 'lobby'; // Set stage for navigation
         // Clear any stale timer from a previous game
         if (state.activeInterval) { clearInterval(state.activeInterval); state.activeInterval = null; }
-        // Ensure bestTimes exists (safety)
+        // Ensure bestTimes exists (safety) in case migration didn't run
         if (!schData.bestTimes) schData.bestTimes = { '3x3': null, '4x4': null, '5x5': null, '6x6': null };
 
         const sizes = [
@@ -1577,8 +1677,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* =============================================
        ABOUT / HELP / LEADERBOARD VIEWS
+       These functions render the static content pages
        ============================================= */
     function renderAbout() {
+        // Renders the About page showing the development team and project information
         const developers = [
             { name: 'Siddhi', role: 'Lead Developer', seed: 'Siddhi', color: 'var(--golden-yellow)' },
             { name: 'Yaksh', role: 'Co-Developer', seed: 'Yaksh', color: '#1B5E20', customImg: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberKnight&eyes=robocop' },
