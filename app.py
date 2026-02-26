@@ -4,77 +4,53 @@ from flask import Flask, jsonify, request, session, redirect, url_for, send_from
 from flask_cors import CORS
 # Imports CORS (Cross-Origin Resource Sharing)
 
-from flask_sqlalchemy import SQLAlchemy
-# Imports SQLAlchemy ORM
+import firebase_admin
+from firebase_admin import credentials, auth, firestore
 
 import os
 import json
-import requests as http_requests
-# http_requests is used for fetching Google's public keys during token verification
 
 from dotenv import load_dotenv
-
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-# Google libraries for verifying the OAuth2 ID token sent from the frontend
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key")
 
-# Google OAuth Client ID
-GOOGLE_CLIENT_ID = "253566578017-e11j4dmmphh8pta941dgqftjpplbshs9.apps.googleusercontent.com"
+# Firebase Initialization
+# Expects a serviceAccountKey.json file in the root directory
+# If not present, it will attempt to initialize using environment variables or default credentials
+try:
+    if os.path.exists("serviceAccountKey.json"):
+        cred = credentials.Certificate("serviceAccountKey.json")
+        firebase_admin.initialize_app(cred)
+    else:
+        # Fallback to default credentials (useful for some environments)
+        firebase_admin.initialize_app()
+    
+    db_firestore = firestore.client()
+    print("Firebase initialized successfully.")
+except Exception as e:
+    print(f"Error initializing Firebase: {e}")
+    print("Make sure serviceAccountKey.json is present or environment variables are set.")
+    db_firestore = None
 
 CORS(app, supports_credentials=True)
 # supports_credentials=True allows cookies/sessions to be sent cross-origin
 
-# Database Configuration
-# You can switch between SQLite, MySQL, or PostgreSQL
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///memory_master.db")
-# Reads the database connection URL from environment; defaults to a local SQLite file called memory_master.db
+# Helper functions for Firestore replacement of User/GameProgress models
+def get_user(user_id):
+    if not db_firestore: return None
+    user_ref = db_firestore.collection('users').document(str(user_id))
+    doc = user_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
 
-app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-# Configures SQLAlchemy to connect to the specified database
-
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Disables SQLAlchemy modification tracking to save memory and avoid unnecessary overhead
-
-db = SQLAlchemy(app)
-# Initializes the SQLAlchemy database instance and binds it to the Flask app
-
-# Models
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    google_id = db.Column(db.String(100), unique=True, nullable=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    picture = db.Column(db.String(500), nullable=True)
-    # Google profile picture URL
-    coins = db.Column(db.Integer, default=0)
-    stars = db.Column(db.Integer, default=0)
-    progress = db.relationship('GameProgress', backref='user', lazy=True)
-
-class GameProgress(db.Model):
-    # Defines the GameProgress database table — stores per-game statistics for each user
-
-    id = db.Column(db.Integer, primary_key=True)
-    # Auto-incrementing unique identifier for each progress record
-
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    # Links this progress record to a specific user via foreign key
-
-    game_type = db.Column(db.String(50), nullable=False) # 'memory', 'f1', 'schulte', 'confusion'
-    # Identifies which game this record belongs to (one of the four game types)
-
-    score = db.Column(db.Float, default=0.0)
-    # The player's best score for this game type; meaning varies per game (points, time, etc.)
-
-    level = db.Column(db.Integer, default=1)
-    # The highest level reached (primarily used by the Room Observer memory game)
-
-    extra_data = db.Column(db.Text, nullable=True) # JSON strings for things like max_combo, avg_rt
-    # Stores additional game-specific data as a JSON string (e.g., combo streaks, average reaction times)
+def update_user(user_id, data):
+    if not db_firestore: return
+    user_ref = db_firestore.collection('users').document(str(user_id))
+    user_ref.set(data, merge=True)
 
 # Routes
 @app.route('/')
@@ -82,85 +58,76 @@ def index():
     return send_from_directory('.', 'index.html')
 
 # ── Google OAuth Callback ─────────────────────────────────
-@app.route('/auth/google/callback', methods=['POST'])
-def google_callback():
-    """Receives a Google ID token from the frontend, verifies it,
-       and creates or finds the corresponding user."""
+@app.route('/auth/firebase/callback', methods=['POST'])
+def firebase_callback():
+    """Receives a Firebase ID token from the frontend, verifies it,
+       and creates or finds the corresponding user in Firestore."""
+    if not db_firestore:
+        return jsonify({"status": "error", "message": "Firebase not initialized"}), 500
+
     data = request.json
-    token = data.get('credential')
+    token = data.get('idToken')
     if not token:
-        return jsonify({"status": "error", "message": "No credential provided"}), 400
+        return jsonify({"status": "error", "message": "No token provided"}), 400
 
     try:
-        # Verify the Google ID token using Google's public keys
-        idinfo = id_token.verify_oauth2_token(
-            token, google_requests.Request(), GOOGLE_CLIENT_ID
-        )
+        # Verify the ID token sent by the client
+        decoded_token = auth.verify_id_token(token)
+        uid = decoded_token['uid']
+        email = decoded_token.get('email')
+        name = decoded_token.get('name', email.split('@')[0])
+        picture = decoded_token.get('picture', '')
 
-        google_id = idinfo['sub']        # Unique Google user ID
-        email     = idinfo['email']      # User's email
-        name      = idinfo.get('name', email.split('@')[0])  # Display name
-        picture   = idinfo.get('picture', '')                 # Profile photo URL
+        # Use Firestore to find or create user
+        user_ref = db_firestore.collection('users').document(uid)
+        user_doc = user_ref.get()
 
-    except ValueError:
-        return jsonify({"status": "error", "message": "Invalid Google token"}), 401
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            # Update latest profile info
+            user_data.update({
+                "username": name,
+                "picture": picture
+            })
+            user_ref.set(user_data, merge=True)
+        else:
+            # Create new user document
+            user_data = {
+                "id": uid,
+                "email": email,
+                "username": name,
+                "picture": picture,
+                "coins": 0,
+                "stars": 0
+            }
+            user_ref.set(user_data)
 
-    # Find existing user by google_id or email, or create a new one
-    user = User.query.filter_by(google_id=google_id).first()
-    if not user:
-        user = User.query.filter_by(email=email).first()
+        # Store UID in session
+        session['user_id'] = uid
 
-    if user:
-        # Update existing user with latest Google data
-        user.google_id = google_id
-        user.username = name
-        user.picture = picture
-    else:
-        # Create brand-new user
-        user = User(google_id=google_id, email=email, username=name, picture=picture)
-        db.session.add(user)
+        return jsonify({
+            "status": "success",
+            "user": user_data
+        })
 
-    db.session.commit()
-
-    # Store user ID in server-side session for persistence
-    session['user_id'] = user.id
-
-    return jsonify({
-        "status": "success",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "picture": user.picture,
-            "coins": user.coins,
-            "stars": user.stars
-        }
-    })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
 
 # ── Session Check ─────────────────────────────────────────
 @app.route('/api/me', methods=['GET'])
 def get_me():
-    """Returns the currently logged-in user from the Flask session,
-       so the frontend can restore the session on page load."""
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({"status": "not_logged_in"}), 200
 
-    user = db.session.get(User, user_id)
-    if not user:
+    user_data = get_user(user_id)
+    if not user_data:
         session.pop('user_id', None)
         return jsonify({"status": "not_logged_in"}), 200
 
     return jsonify({
         "status": "success",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "picture": user.picture,
-            "coins": user.coins,
-            "stars": user.stars
-        }
+        "user": user_data
     })
 
 # ── Logout ────────────────────────────────────────────────
@@ -173,147 +140,98 @@ def logout():
 # ── Legacy login (kept as fallback for offline mode) ──────
 @app.route('/api/login', methods=['POST'])
 def login():
+    # Kept for compatibility but should use firebase_callback
     data = request.json
-    email = data.get('email')
-    username = data.get('username', 'Master Player')
-    google_id = data.get('google_id')
-    user = User.query.filter_by(email=email).first()
-    if not user:
-        user = User(email=email, username=username, google_id=google_id)
-        db.session.add(user)
-        db.session.commit()
-    session['user_id'] = user.id
-    return jsonify({
-        "status": "success",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "picture": getattr(user, 'picture', None),
-            "coins": user.coins,
-            "stars": user.stars
+    uid = data.get('uid')
+    if not uid: return jsonify({"status": "error"}), 400
+    
+    user_data = get_user(uid)
+    if not user_data:
+        user_data = {
+            "id": uid,
+            "email": data.get('email'),
+            "username": data.get('username', 'Master Player'),
+            "coins": 0,
+            "stars": 0
         }
-    })
+        update_user(uid, user_data)
+    
+    session['user_id'] = uid
+    return jsonify({"status": "success", "user": user_data})
 
 @app.route('/api/save-progress', methods=['POST'])
-# Defines the save-progress API endpoint; accepts POST requests to save game results
 def save_progress():
-    # Handler function for saving a player's game progress after completing a round
+    if not db_firestore:
+        return jsonify({"status": "error", "message": "Firebase not initialized"}), 500
+
     data = request.json
-    # Parses the incoming JSON request body
-
     user_id = data.get('user_id')
-    # Gets the user's ID to identify which player's progress to update
-
     game_type = data.get('game_type')
-    # Gets which game was played ('memory', 'f1', 'schulte', 'confusion')
-
     score = data.get('score', 0.0)
-    # Gets the score achieved; defaults to 0
-
     level = data.get('level', 1)
-    # Gets the level played; defaults to 1
-
     coins_gained = data.get('coins_gained', 0)
-    # Gets the number of coins earned this round
-
     stars_gained = data.get('stars_gained', 0)
-    # Gets the number of stars earned this round
-
     extra_data = data.get('extra_data', {})
-    # Gets any additional game-specific data (e.g., combo, reaction time)
 
-    user = db.session.get(User, user_id)
-    # Looks up the user by their ID in the database
+    user_ref = db_firestore.collection('users').document(str(user_id))
+    user_doc = user_ref.get()
 
-    if not user:
+    if not user_doc.exists:
         return jsonify({"status": "error", "message": "User not found"}), 404
-        # Returns a 404 error if the user doesn't exist in the database
 
-    # Update user stats
-    user.coins += coins_gained
-    # Adds the newly earned coins to the user's total coin balance
+    user_data = user_doc.to_dict()
+    user_data['coins'] = user_data.get('coins', 0) + coins_gained
+    user_data['stars'] = user_data.get('stars', 0) + stars_gained
+    user_ref.set(user_data, merge=True)
 
-    user.stars += stars_gained
-    # Adds the newly earned stars to the user's total star count
+    # Progress collection
+    progress_ref = db_firestore.collection('progress').document(f"{user_id}_{game_type}")
+    progress_doc = progress_ref.get()
+    
+    progress = progress_doc.to_dict() if progress_doc.exists else {
+        "user_id": user_id,
+        "username": user_data.get('username'),
+        "game_type": game_type,
+        "score": 0.0,
+        "level": 1
+    }
 
-    # Update or create game progress
-    progress = GameProgress.query.filter_by(user_id=user_id, game_type=game_type).first()
-    # Searches for an existing progress record for this user and game type
-
-    if not progress:
-        progress = GameProgress(user_id=user_id, game_type=game_type)
-        # Creates a new progress record if none exists for this user/game combination
-
-        db.session.add(progress)
-        # Stages the new progress record to be added to the database
-
-    # For memory game, update level if higher
     if game_type == 'memory':
-        # Special handling for Room Observer: we only update if the player reached a higher level or score
-        if level > progress.level:
-            progress.level = level
-            # Updates the stored level only if the player beat their previous best level
-
-        if score > progress.score:
-            progress.score = score
-            # Updates the stored score only if the player beat their previous best score
-
-    # For reaction games, update score if better (lower is better for time)
+        if level > progress.get('level', 1): progress['level'] = level
+        if score > progress.get('score', 0.0): progress['score'] = score
     elif game_type in ['f1', 'schulte']:
-        # For F1 Reflex and Schulte Grid, a lower time means better performance
-        if progress.score == 0 or score < progress.score:
-            progress.score = score
-            # Updates the stored score only if this time is faster (lower) than the previous best
-
-    # For Color Confusion, update high score
+        if progress['score'] == 0 or score < progress['score']: progress['score'] = score
     elif game_type == 'confusion':
-        # For Color Confusion, a higher score is better
-        if score > progress.score:
-            progress.score = score
-            # Updates the stored score only if this score is higher than the previous best
+        if score > progress['score']: progress['score'] = score
 
-    progress.extra_data = json.dumps(extra_data)
-    # Serializes the extra data dictionary into a JSON string and stores it in the database
+    progress['extra_data'] = extra_data
+    progress_ref.set(progress)
 
-    db.session.commit()
-    # Saves all changes (updated user stats + game progress) to the database
-
-    return jsonify({"status": "success", "coins": user.coins, "stars": user.stars})
+    return jsonify({"status": "success", "coins": user_data['coins'], "stars": user_data['stars']})
     # Returns a success response with the user's updated coin and star totals
 
 @app.route('/api/leaderboard/<game_type>', methods=['GET'])
-# Defines the leaderboard API endpoint; takes the game type as a URL parameter
 def get_leaderboard(game_type):
-    # Handler function to retrieve the top 10 players for a specific game
-    # Get top 10 players for the given game type
+    if not db_firestore:
+        return jsonify({"status": "error", "message": "Firebase not initialized"}), 500
+
+    query = db_firestore.collection('progress').where('game_type', '==', game_type)
+    
     if game_type in ['f1', 'schulte']:
         # Lower score (time) is better
-        results = GameProgress.query.filter_by(game_type=game_type).order_by(GameProgress.score.asc()).limit(10).all()
-        # Queries the database for the top 10 FASTEST times (ascending order) for reaction-based games
-
+        results = query.order_by('score', direction=firestore.Query.ASCENDING).limit(10).stream()
     else:
         # Higher score is better
-        results = GameProgress.query.filter_by(game_type=game_type).order_by(GameProgress.score.desc()).limit(10).all()
-        # Queries the database for the top 10 HIGHEST scores (descending order) for score-based games
+        results = query.order_by('score', direction=firestore.Query.DESCENDING).limit(10).stream()
 
     leaderboard = []
-    # Initializes an empty list to build the leaderboard response
-
-    for res in results:
-        # Iterates through each top player's progress record
+    for doc in results:
+        res = doc.to_dict()
         leaderboard.append({
-            "username": res.user.username,
-            # Gets the player's display name via the relationship backref
-
-            "score": res.score,
-            # The player's best score for this game
-
-            "level": res.level,
-            # The player's highest level reached
-
-            "extra_data": json.loads(res.extra_data) if res.extra_data else {}
-            # Deserializes the extra JSON data back into a dictionary; returns empty dict if none exists
+            "username": res.get('username', 'Anonymous'),
+            "score": res.get('score'),
+            "level": res.get('level'),
+            "extra_data": res.get('extra_data', {})
         })
 
     return jsonify(leaderboard)
@@ -449,13 +367,8 @@ def serve_static(filename):
     return send_from_directory('.', filename)
     # Sends the requested file from the project root directory to the browser
 
-if __name__ == '__main__':
-    # This block only runs when the file is executed directly (not when imported as a module)
-
-    with app.app_context():
-        # Creates an application context so database operations can run during setup
-        db.create_all()
-        # Creates all database tables defined by the models (User, GameProgress) if they don't already exist
+    # Firebase initialization handled at top level now
+    pass
 
     # Port is set to 5000 by default or via env
     port = int(os.getenv("PORT", 5000))

@@ -35,19 +35,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Live state (loaded from DB on startup)
     // The central state object holds ALL game data in memory — loaded from localStorage on startup
+    // Firebase Configuration (PLACEHOLDER - User needs to provide actual config)
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+        appId: "YOUR_APP_ID"
+    };
+
+    // Initialize Firebase
+    try {
+        firebase.initializeApp(firebaseConfig);
+        var db_firestore = firebase.firestore();
+        console.log("Firebase initialized on client.");
+    } catch (e) {
+        console.error("Firebase initialization failed:", e);
+    }
+
     const state = {
-        user: JSON.parse(localStorage.getItem('mastermind_user') || 'null'),
-        // Loads the logged-in user's profile from localStorage (null if not logged in)
+        user: null, // Will be set by Firebase auth state observer
         currentView: 'home',
-        // Tracks which page/view is currently displayed (home, about, help, leaderboard)
         currentGame: null,
-        // Tracks which game is currently active (memory, f1, schulte, confusion) or null if on home screen
-        currentStage: 'home', // 'home' | 'lobby' | 'playing'
-        // Tracks the navigation depth within a game: home → lobby → playing
+        currentStage: 'home',
         activeInterval: null,
-        // Stores the ID of any active setInterval timer so it can be cleared when navigating away
         ...DB.load()
-        // Spreads all saved game data (coins, stars, memory, f1, schulte, confusion) into the state object
     };
 
     /* =============================================
@@ -402,32 +415,52 @@ document.addEventListener('DOMContentLoaded', () => {
     init(); // Call the initialization function immediately
 
     function init() {
-        // Sets up the initial state of the game: loading bar, user session, and event listeners
-        updateNavStats(); // Display current coins/stars in the navbar
+        updateNavStats();
 
-        let progress = 0; // Loading bar progress percentage (0-100)
-        const progressFill = document.getElementById('loader-progress'); // The loading bar fill element
-        const interval = setInterval(() => {
-            // Simulates a loading bar by incrementing progress at random speeds every 200ms
-            progress += Math.random() * 30; // Add a random amount (0-30%) each tick for natural feel
-            if (progress >= 100) {
-                progress = 100; // Cap at 100%
-                clearInterval(interval); // Stop the loading simulation
-                hideLoader(); // Transition from loading screen to the main app
+        // Firebase Auth State Observer
+        firebase.auth().onAuthStateChanged(async (firebaseUser) => {
+            if (firebaseUser) {
+                console.log("Firebase user detected:", firebaseUser.uid);
+                // Get the ID token to send to backend for verification and user record creation/sync
+                try {
+                    const idToken = await firebaseUser.getIdToken();
+                    const response = await fetch(`${API_URL}/auth/firebase/callback`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ idToken })
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        state.user = data.user;
+                        loginBtn.classList.add('hidden');
+                        const userInfo = document.getElementById('user-info');
+                        userInfo.classList.remove('hidden');
+                        userInfo.querySelector('.user-name').textContent = state.user.username;
+                        updateNavStats();
+                    }
+                } catch (e) {
+                    console.error("Firebase session persistence failed:", e);
+                }
+            } else {
+                state.user = null;
+                loginBtn.classList.remove('hidden');
+                document.getElementById('user-info').classList.add('hidden');
             }
-            if (progressFill) progressFill.style.width = `${progress}%`; // Update the visual width of the progress bar
-        }, 200); // Run every 200ms
+        });
 
-        if (state.user) {
-            // If a user is already logged in (from a previous session), show their profile instead of the Login button
-            loginBtn.classList.add('hidden'); // Hide the Login button
-            const userInfo = document.getElementById('user-info');
-            userInfo.classList.remove('hidden'); // Show the user info section
-            const nameEl = userInfo.querySelector('.user-name');
-            if (nameEl) nameEl.textContent = state.user.username; // Display the user's name
-        }
+        let progress = 0;
+        const progressFill = document.getElementById('loader-progress');
+        const interval = setInterval(() => {
+            progress += Math.random() * 30;
+            if (progress >= 100) {
+                progress = 100;
+                clearInterval(interval);
+                hideLoader();
+            }
+            if (progressFill) progressFill.style.width = `${progress}%`;
+        }, 200);
 
-        setupEventListeners(); // Attach all click handlers and navigation listeners
+        setupEventListeners();
     }
 
     function hideLoader() {
@@ -699,38 +732,31 @@ document.addEventListener('DOMContentLoaded', () => {
        AUTH — handles user login via Google/Gmail
        ============================================= */
     async function handleGoogleLogin() {
-        // Sends a login request to the backend and updates the UI with the user's profile
+        const provider = new firebase.auth.GoogleAuthProvider();
         try {
-            const response = await fetch(`${API_URL}/login`, {
+            const result = await firebase.auth().signInWithPopup(provider);
+            const idToken = await result.user.getIdToken();
+
+            const response = await fetch(`${API_URL}/auth/firebase/callback`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: 'player@example.com', // Demo email (in production, this comes from Google OAuth)
-                    username: 'Master Player' // Demo username
-                })
+                body: JSON.stringify({ idToken })
             });
-            const data = await response.json(); // Parse the server response
-            if (data.status === 'success') {
-                state.user = data.user; // Store the user profile in state
-                localStorage.setItem('mastermind_user', JSON.stringify(state.user)); // Persist to localStorage
-                state.coins = data.user.coins; // Update coins from server
-                state.stars = data.user.stars; // Update stars from server
 
-                loginBtn.classList.add('hidden'); // Hide the Login button
+            const data = await response.json();
+            if (data.status === 'success') {
+                state.user = data.user;
+                loginBtn.classList.add('hidden');
                 const userInfo = document.getElementById('user-info');
-                userInfo.classList.remove('hidden'); // Show the user info section
-                userInfo.querySelector('.user-name').textContent = state.user.username; // Display username
-                authModal.classList.add('hidden'); // Close the login modal
-                updateNavStats(); // Refresh navbar coin/star display
-                showToast(`✅ Logged in as ${state.user.username}!`); // Show success notification
+                userInfo.classList.remove('hidden');
+                userInfo.querySelector('.user-name').textContent = state.user.username;
+                authModal.classList.add('hidden');
+                updateNavStats();
+                showToast(`✅ Welcome, ${state.user.username}!`);
             }
         } catch (e) {
-            // Fallback for offline — creates a local-only user so the game still works without a server
-            state.user = { id: 1, username: 'Master Player' };
-            loginBtn.classList.add('hidden');
-            document.getElementById('user-info').classList.remove('hidden');
-            authModal.classList.add('hidden');
-            showToast('⚠️ Offline Mode: Logged in locally'); // Notify user they're playing offline
+            console.error("Firebase Login Error:", e);
+            showToast('❌ Login failed. See console for details.');
         }
     }
 
