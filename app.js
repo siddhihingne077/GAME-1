@@ -401,9 +401,12 @@ document.addEventListener('DOMContentLoaded', () => {
        ============================================= */
     init(); // Call the initialization function immediately
 
-    function init() {
+    async function init() {
         // Sets up the initial state of the game: loading bar, user session, and event listeners
         updateNavStats(); // Display current coins/stars in the navbar
+
+        await checkSession(); // Wait for session fetch to complete before setting up user info
+        initGoogleAuth(); // Initialize Google Identity Services
 
         let progress = 0; // Loading bar progress percentage (0-100)
         const progressFill = document.getElementById('loader-progress'); // The loading bar fill element
@@ -425,6 +428,8 @@ document.addEventListener('DOMContentLoaded', () => {
             userInfo.classList.remove('hidden'); // Show the user info section
             const nameEl = userInfo.querySelector('.user-name');
             if (nameEl) nameEl.textContent = state.user.username; // Display the user's name
+            const avatarEl = document.getElementById('user-avatar');
+            if (avatarEl && state.user.picture) avatarEl.src = state.user.picture; // Display Google avatar if available
         }
 
         setupEventListeners(); // Attach all click handlers and navigation listeners
@@ -501,8 +506,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Auth — login/modal event handlers
         loginBtn.addEventListener('click', () => authModal.classList.remove('hidden')); // Open login modal
         document.querySelector('.close-modal').addEventListener('click', () => authModal.classList.add('hidden')); // Close login modal
-        googleLogin.addEventListener('click', handleGoogleLogin); // Google login button handler
-        document.getElementById('gmail-login').addEventListener('click', handleGoogleLogin); // Gmail login button handler (same function)
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) logoutBtn.addEventListener('click', handleLogout); // Logout handler
     }
 
     /* =============================================
@@ -696,42 +701,95 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* =============================================
-       AUTH — handles user login via Google/Gmail
+       AUTH — handles user login via Google Identity Services
        ============================================= */
-    async function handleGoogleLogin() {
-        // Sends a login request to the backend and updates the UI with the user's profile
+
+    // Connect Google callback to backend token verification
+    window.handleCredentialResponse = async (response) => {
         try {
-            const response = await fetch(`${API_URL}/login`, {
+            const BASE_URL = API_URL.replace('/api', '');
+            const res = await fetch(`${BASE_URL}/auth/google/callback`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: 'player@example.com', // Demo email (in production, this comes from Google OAuth)
-                    username: 'Master Player' // Demo username
-                })
+                body: JSON.stringify({ credential: response.credential })
             });
-            const data = await response.json(); // Parse the server response
+            const data = await res.json();
             if (data.status === 'success') {
-                state.user = data.user; // Store the user profile in state
-                localStorage.setItem('mastermind_user', JSON.stringify(state.user)); // Persist to localStorage
-                state.coins = data.user.coins; // Update coins from server
-                state.stars = data.user.stars; // Update stars from server
-
-                loginBtn.classList.add('hidden'); // Hide the Login button
-                const userInfo = document.getElementById('user-info');
-                userInfo.classList.remove('hidden'); // Show the user info section
-                userInfo.querySelector('.user-name').textContent = state.user.username; // Display username
-                authModal.classList.add('hidden'); // Close the login modal
-                updateNavStats(); // Refresh navbar coin/star display
-                showToast(`✅ Logged in as ${state.user.username}!`); // Show success notification
+                updateAuthUI(data.user);
+                showToast(`✅ Logged in as ${data.user.username}!`);
+            } else {
+                showToast('❌ Login failed: ' + data.message);
             }
         } catch (e) {
-            // Fallback for offline — creates a local-only user so the game still works without a server
-            state.user = { id: 1, username: 'Master Player' };
-            loginBtn.classList.add('hidden');
-            document.getElementById('user-info').classList.remove('hidden');
-            authModal.classList.add('hidden');
-            showToast('⚠️ Offline Mode: Logged in locally'); // Notify user they're playing offline
+            showToast('⚠️ Offline Mode: Login unavailable');
         }
+    };
+
+    function initGoogleAuth() {
+        // Initialize Google Identity Services
+        if (!window.google || !window.google.accounts) return;
+        google.accounts.id.initialize({
+            client_id: "253566578017-e11j4dmmphh8pta941dgqftjpplbshs9.apps.googleusercontent.com",
+            callback: window.handleCredentialResponse
+        });
+
+        const btnContainer = document.getElementById('google-btn-container');
+        if (btnContainer) {
+            // Render the official Google Sign-In button inside the modal
+            google.accounts.id.renderButton(btnContainer, {
+                theme: "outline", size: "large", type: "standard", shape: "rectangular"
+            });
+        }
+    }
+
+    async function checkSession() {
+        // Try restoring session from backend
+        try {
+            const res = await fetch(`${API_URL}/me`, { method: 'GET', credentials: 'omit' });
+            const data = await res.json();
+            if (data.status === 'success') {
+                state.user = data.user;
+                localStorage.setItem('mastermind_user', JSON.stringify(state.user));
+            }
+        } catch (e) {
+            console.log('Session check failed (offline mode)');
+        }
+    }
+
+    async function handleLogout() {
+        // Logout user and clear session
+        try {
+            await fetch(`${API_URL}/logout`, { method: 'POST' });
+        } catch (e) { console.log('Logout API failed'); }
+
+        state.user = null;
+        localStorage.removeItem('mastermind_user');
+
+        loginBtn.classList.remove('hidden');
+        document.getElementById('user-info').classList.add('hidden');
+
+        if (window.google) google.accounts.id.disableAutoSelect();
+        showToast('👋 Logged out');
+    }
+
+    function updateAuthUI(user) {
+        // Applies user data to state and UI
+        state.user = user;
+        localStorage.setItem('mastermind_user', JSON.stringify(state.user));
+        state.coins = user.coins;
+        state.stars = user.stars;
+
+        loginBtn.classList.add('hidden');
+        const userInfo = document.getElementById('user-info');
+        userInfo.classList.remove('hidden');
+        userInfo.querySelector('.user-name').textContent = user.username;
+        const avatarEl = document.getElementById('user-avatar');
+        if (avatarEl && user.picture) avatarEl.src = user.picture;
+
+        const authModal = document.getElementById('auth-modal');
+        if (authModal) authModal.classList.add('hidden');
+
+        updateNavStats();
     }
 
     /* =============================================
