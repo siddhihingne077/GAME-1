@@ -1,8 +1,9 @@
-/**
- * Master Mind - Core Application Logic
- * Features: Tabs, 3 Games, Back/Home nav, localStorage persistence per game
- */
-// Main JavaScript file that powers the entire Master Mind game — contains all game logic, UI rendering, sound engine, and state management
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+const supabase = createClient(
+    "https://xyebsgqyiwerbqvhuvkg.supabase.co",
+    "sb_publishable_D5pV3C725RN5eyXoGUMS-Q_gwS2sCj5"
+)
 
 document.addEventListener('DOMContentLoaded', () => {
     // Waits for the entire HTML page to finish loading before running any game code — prevents errors from accessing elements that don't exist yet
@@ -30,24 +31,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const API_URL = 'http://127.0.0.1:5000/api';
+
+    const API_URL = '/api';
     // Base URL for the Flask backend API — all server requests are sent to this address
 
     // Live state (loaded from DB on startup)
-    // The central state object holds ALL game data in memory — loaded from localStorage on startup
     const state = {
-        user: JSON.parse(localStorage.getItem('mastermind_user') || 'null'),
-        // Loads the logged-in user's profile from localStorage (null if not logged in)
+        user: null, // Will be set by Supabase auth state observer
         currentView: 'home',
-        // Tracks which page/view is currently displayed (home, about, help, leaderboard)
         currentGame: null,
-        // Tracks which game is currently active (memory, f1, schulte, confusion) or null if on home screen
-        currentStage: 'home', // 'home' | 'lobby' | 'playing'
-        // Tracks the navigation depth within a game: home → lobby → playing
+        currentStage: 'home',
         activeInterval: null,
-        // Stores the ID of any active setInterval timer so it can be cleared when navigating away
         ...DB.load()
-        // Spreads all saved game data (coins, stars, memory, f1, schulte, confusion) into the state object
     };
 
     /* =============================================
@@ -401,38 +396,56 @@ document.addEventListener('DOMContentLoaded', () => {
        ============================================= */
     init(); // Call the initialization function immediately
 
-    async function init() {
-        // Sets up the initial state of the game: loading bar, user session, and event listeners
-        updateNavStats(); // Display current coins/stars in the navbar
+    function init() {
+        updateNavStats();
 
-        await checkSession(); // Wait for session fetch to complete before setting up user info
-        initGoogleAuth(); // Initialize Google Identity Services
+        // Supabase Auth State Observer
+        supabase.auth.onAuthStateChange(async (event, session) => {
+            if (session?.user) {
+                const user = session.user;
+                console.log("Supabase user detected:", user.id);
+                try {
+                    const response = await fetch(`${API_URL}/auth/supabase/callback`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ session })
+                    });
+                    const data = await response.json();
+                    if (data.status === "success") {
+                        state.user = data.user;
+                        loginBtn.classList.add("hidden");
+                        const userInfo = document.getElementById("user-info");
+                        userInfo.classList.remove("hidden");
+                        userInfo.querySelector(".user-name").textContent = state.user.username;
 
-        let progress = 0; // Loading bar progress percentage (0-100)
-        const progressFill = document.getElementById('loader-progress'); // The loading bar fill element
-        const interval = setInterval(() => {
-            // Simulates a loading bar by incrementing progress at random speeds every 200ms
-            progress += Math.random() * 30; // Add a random amount (0-30%) each tick for natural feel
-            if (progress >= 100) {
-                progress = 100; // Cap at 100%
-                clearInterval(interval); // Stop the loading simulation
-                hideLoader(); // Transition from loading screen to the main app
+                        const avatarEl = document.getElementById("user-avatar");
+                        if (avatarEl && state.user.picture) avatarEl.src = state.user.picture;
+
+                        updateNavStats();
+                    }
+                } catch (e) {
+                    console.error("Supabase session sync failed:", e);
+                }
+            } else {
+                state.user = null;
+                loginBtn.classList.remove("hidden");
+                document.getElementById("user-info").classList.add("hidden");
             }
-            if (progressFill) progressFill.style.width = `${progress}%`; // Update the visual width of the progress bar
-        }, 200); // Run every 200ms
+        });
 
-        if (state.user) {
-            // If a user is already logged in (from a previous session), show their profile instead of the Login button
-            loginBtn.classList.add('hidden'); // Hide the Login button
-            const userInfo = document.getElementById('user-info');
-            userInfo.classList.remove('hidden'); // Show the user info section
-            const nameEl = userInfo.querySelector('.user-name');
-            if (nameEl) nameEl.textContent = state.user.username; // Display the user's name
-            const avatarEl = document.getElementById('user-avatar');
-            if (avatarEl && state.user.picture) avatarEl.src = state.user.picture; // Display Google avatar if available
-        }
+        let progress = 0;
+        const progressFill = document.getElementById('loader-progress');
+        const interval = setInterval(() => {
+            progress += Math.random() * 30;
+            if (progress >= 100) {
+                progress = 100;
+                clearInterval(interval);
+                hideLoader();
+            }
+            if (progressFill) progressFill.style.width = `${progress}%`;
+        }, 200);
 
-        setupEventListeners(); // Attach all click handlers and navigation listeners
+        setupEventListeners();
     }
 
     function hideLoader() {
@@ -506,6 +519,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // Auth — login/modal event handlers
         loginBtn.addEventListener('click', () => authModal.classList.remove('hidden')); // Open login modal
         document.querySelector('.close-modal').addEventListener('click', () => authModal.classList.add('hidden')); // Close login modal
+
+        const googleLoginBtn = document.getElementById('google-login');
+        if (googleLoginBtn) googleLoginBtn.addEventListener('click', handleGoogleLogin);
+
+        const emailLoginBtn = document.getElementById('email-login-btn');
+        if (emailLoginBtn) emailLoginBtn.addEventListener('click', handleEmailLogin);
+
+        const emailSignupBtn = document.getElementById('email-signup-btn');
+        if (emailSignupBtn) emailSignupBtn.addEventListener('click', handleEmailSignup);
+
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) logoutBtn.addEventListener('click', handleLogout); // Logout handler
     }
@@ -703,93 +726,63 @@ document.addEventListener('DOMContentLoaded', () => {
     /* =============================================
        AUTH — handles user login via Google Identity Services
        ============================================= */
-
-    // Connect Google callback to backend token verification
-    window.handleCredentialResponse = async (response) => {
+    async function handleGoogleLogin() {
         try {
-            const BASE_URL = API_URL.replace('/api', '');
-            const res = await fetch(`${BASE_URL}/auth/google/callback`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ credential: response.credential })
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: "google",
+                options: {
+                    redirectTo: window.location.origin
+                }
             });
-            const data = await res.json();
-            if (data.status === 'success') {
-                updateAuthUI(data.user);
-                showToast(`✅ Logged in as ${data.user.username}!`);
-            } else {
-                showToast('❌ Login failed: ' + data.message);
-            }
+            if (error) throw error;
         } catch (e) {
-            showToast('⚠️ Offline Mode: Login unavailable');
-        }
-    };
-
-    function initGoogleAuth() {
-        // Initialize Google Identity Services
-        if (!window.google || !window.google.accounts) return;
-        google.accounts.id.initialize({
-            client_id: "253566578017-e11j4dmmphh8pta941dgqftjpplbshs9.apps.googleusercontent.com",
-            callback: window.handleCredentialResponse
-        });
-
-        const btnContainer = document.getElementById('google-btn-container');
-        if (btnContainer) {
-            // Render the official Google Sign-In button inside the modal
-            google.accounts.id.renderButton(btnContainer, {
-                theme: "outline", size: "large", type: "standard", shape: "rectangular"
-            });
+            console.error("Supabase Login Error:", e);
+            showToast("❌ Login failed. See console for details.");
         }
     }
 
-    async function checkSession() {
-        // Try restoring session from backend
+    async function handleEmailSignup() {
+        const email = document.getElementById('auth-email').value;
+        const password = document.getElementById('auth-password').value;
+        if (!email || !password) return showToast("📧 Please enter email and password");
+
         try {
-            const res = await fetch(`${API_URL}/me`, { method: 'GET', credentials: 'omit' });
-            const data = await res.json();
-            if (data.status === 'success') {
-                state.user = data.user;
-                localStorage.setItem('mastermind_user', JSON.stringify(state.user));
-            }
+            const { data, error } = await supabase.auth.signUp({ email, password });
+            if (error) throw error;
+            showToast("✨ Signup successful! Check your email for verification.");
         } catch (e) {
-            console.log('Session check failed (offline mode)');
+            console.error("Signup Error:", e.message);
+            showToast(`❌ Signup failed: ${e.message}`);
+        }
+    }
+
+    async function handleEmailLogin() {
+        const email = document.getElementById('auth-email').value;
+        const password = document.getElementById('auth-password').value;
+        if (!email || !password) return showToast("📧 Please enter email and password");
+
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            authModal.classList.add('hidden');
+            showToast("✅ Login successful");
+        } catch (e) {
+            console.error("Login Error:", e.message);
+            showToast(`❌ Login failed: ${e.message}`);
         }
     }
 
     async function handleLogout() {
-        // Logout user and clear session
         try {
-            await fetch(`${API_URL}/logout`, { method: 'POST' });
-        } catch (e) { console.log('Logout API failed'); }
-
-        state.user = null;
-        localStorage.removeItem('mastermind_user');
-
-        loginBtn.classList.remove('hidden');
-        document.getElementById('user-info').classList.add('hidden');
-
-        if (window.google) google.accounts.id.disableAutoSelect();
-        showToast('👋 Logged out');
-    }
-
-    function updateAuthUI(user) {
-        // Applies user data to state and UI
-        state.user = user;
-        localStorage.setItem('mastermind_user', JSON.stringify(state.user));
-        state.coins = user.coins;
-        state.stars = user.stars;
-
-        loginBtn.classList.add('hidden');
-        const userInfo = document.getElementById('user-info');
-        userInfo.classList.remove('hidden');
-        userInfo.querySelector('.user-name').textContent = user.username;
-        const avatarEl = document.getElementById('user-avatar');
-        if (avatarEl && user.picture) avatarEl.src = user.picture;
-
-        const authModal = document.getElementById('auth-modal');
-        if (authModal) authModal.classList.add('hidden');
-
-        updateNavStats();
+            await supabase.auth.signOut();
+            await fetch(`${API_URL}/logout`, { method: "POST" });
+            state.user = null;
+            loginBtn.classList.remove("hidden");
+            document.getElementById("user-info").classList.add("hidden");
+            showToast("👋 Logged out");
+        } catch (e) {
+            console.error("Logout error:", e);
+        }
     }
 
     /* =============================================

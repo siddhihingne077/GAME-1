@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mastermind-v1';
+const CACHE_NAME = 'mastermind-v2';
 const ASSETS = [
     '/',
     '/index.html',
@@ -31,7 +31,6 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
     event.respondWith(
-        caches.match(event.request)
-            .then((response) => response || fetch(event.request))
+        fetch(event.request).catch(() => caches.match(event.request))
     );
 });
