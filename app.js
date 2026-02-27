@@ -390,6 +390,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginBtn = document.getElementById('login-btn'); // Login button in the navbar
     const authModal = document.getElementById('auth-modal'); // Login modal popup
     const googleLogin = document.getElementById('google-login'); // Google login button inside the modal
+    const userInfo = document.getElementById('user-info'); // User info container in navbar
+    const userAvatar = document.getElementById('user-avatar'); // User avatar image in navbar
+    const profileModal = document.getElementById('profile-modal'); // Profile modal
 
     /* =============================================
        INIT — runs once when the page loads
@@ -531,6 +534,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) logoutBtn.addEventListener('click', handleLogout); // Logout handler
+
+        // Profile Modal
+        if (userAvatar) {
+            userAvatar.style.cursor = 'pointer'; // Make it look clickable
+            userAvatar.addEventListener('click', showProfile);
+        }
+        document.querySelector('.close-profile').addEventListener('click', () => profileModal.classList.add('hidden'));
+    }
+
+    function showProfile() {
+        if (!state.user) return;
+
+        document.getElementById('profile-name').textContent = state.user.username;
+        document.getElementById('profile-coins').textContent = state.coins;
+        document.getElementById('profile-stars').textContent = state.stars;
+
+        const profileAvatar = document.getElementById('profile-avatar');
+        if (profileAvatar && state.user.picture) {
+            profileAvatar.src = state.user.picture;
+        }
+
+        profileModal.classList.remove('hidden');
+        gsap.from('.profile-card', { opacity: 0, scale: 0.9, y: 20, duration: 0.5, ease: "back.out(1.7)" });
     }
 
     /* =============================================
