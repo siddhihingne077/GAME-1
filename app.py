@@ -4,8 +4,6 @@ from flask import Flask, jsonify, request, session, redirect, url_for, send_from
 from flask_cors import CORS
 # Imports CORS (Cross-Origin Resource Sharing)
 
-import firebase_admin
-from firebase_admin import credentials, auth, firestore
 
 import os
 import json
@@ -17,23 +15,9 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key")
 
-# Firebase Initialization
-# Expects a serviceAccountKey.json file in the root directory
-# If not present, it will attempt to initialize using environment variables or default credentials
-try:
-    if os.path.exists("serviceAccountKey.json"):
-        cred = credentials.Certificate("serviceAccountKey.json")
-        firebase_admin.initialize_app(cred)
-    else:
-        # Fallback to default credentials (useful for some environments)
-        firebase_admin.initialize_app()
-    
-    db_firestore = firestore.client()
-    print("Firebase initialized successfully.")
-except Exception as e:
-    print(f"Error initializing Firebase: {e}")
-    print("Make sure serviceAccountKey.json is present or environment variables are set.")
-    db_firestore = None
+
+# Supabase initialization would go here for backend DB access
+db_firestore = None 
 
 CORS(app, supports_credentials=True)
 # supports_credentials=True allows cookies/sessions to be sent cross-origin
@@ -57,41 +41,40 @@ def update_user(user_id, data):
 def index():
     return send_from_directory('.', 'index.html')
 
-# ── Google OAuth Callback ─────────────────────────────────
-@app.route('/auth/firebase/callback', methods=['POST'])
-def firebase_callback():
-    """Receives a Firebase ID token from the frontend, verifies it,
-       and creates or finds the corresponding user in Firestore."""
-    if not db_firestore:
-        return jsonify({"status": "error", "message": "Firebase not initialized"}), 500
-
+# ── Supabase Auth Callback ───────────────────────────────
+@app.route('/auth/supabase/callback', methods=['POST'])
+def supabase_callback():
+    """Receives Supabase session data from the frontend.
+       In a production app, the backend should verify the JWT using the Supabase JWT Secret."""
     data = request.json
-    token = data.get('idToken')
-    if not token:
-        return jsonify({"status": "error", "message": "No token provided"}), 400
+    session_data = data.get('session')
+    if not session_data:
+        return jsonify({"status": "error", "message": "No session provided"}), 400
 
-    try:
-        # Verify the ID token sent by the client
-        decoded_token = auth.verify_id_token(token)
-        uid = decoded_token['uid']
-        email = decoded_token.get('email')
-        name = decoded_token.get('name', email.split('@')[0])
-        picture = decoded_token.get('picture', '')
+    user = session_data.get('user')
+    if not user:
+        return jsonify({"status": "error", "message": "No user in session"}), 400
 
-        # Use Firestore to find or create user
+    uid = user['id']
+    email = user.get('email')
+    user_metadata = user.get('user_metadata', {})
+    name = user_metadata.get('full_name', email.split('@')[0])
+    picture = user_metadata.get('avatar_url', '')
+
+    # Use Firestore to find or create user (keeping Firestore for data storage for now)
+    # If the user wants to migrate DB too, we'd use Supabase DB here.
+    if db_firestore:
         user_ref = db_firestore.collection('users').document(uid)
         user_doc = user_ref.get()
 
         if user_doc.exists:
             user_data = user_doc.to_dict()
-            # Update latest profile info
             user_data.update({
                 "username": name,
                 "picture": picture
             })
             user_ref.set(user_data, merge=True)
         else:
-            # Create new user document
             user_data = {
                 "id": uid,
                 "email": email,
@@ -101,17 +84,24 @@ def firebase_callback():
                 "stars": 0
             }
             user_ref.set(user_data)
+    else:
+        # Fallback if Firestore is not available
+        user_data = {
+            "id": uid,
+            "email": email,
+            "username": name,
+            "picture": picture,
+            "coins": 0,
+            "stars": 0
+        }
 
-        # Store UID in session
-        session['user_id'] = uid
+    # Store UID in session
+    session['user_id'] = uid
 
-        return jsonify({
-            "status": "success",
-            "user": user_data
-        })
-
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 401
+    return jsonify({
+        "status": "success",
+        "user": user_data
+    })
 
 # ── Session Check ─────────────────────────────────────────
 @app.route('/api/me', methods=['GET'])

@@ -1,8 +1,9 @@
-/**
- * Master Mind - Core Application Logic
- * Features: Tabs, 3 Games, Back/Home nav, localStorage persistence per game
- */
-// Main JavaScript file that powers the entire Master Mind game — contains all game logic, UI rendering, sound engine, and state management
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+
+const supabase = createClient(
+    "https://xyebsgqyiwerbqvhuvkg.supabase.co",
+    "sb_publishable_D5pV3C725RN5eyXoGUMS-Q_gwS2sCj5"
+)
 
 document.addEventListener('DOMContentLoaded', () => {
     // Waits for the entire HTML page to finish loading before running any game code — prevents errors from accessing elements that don't exist yet
@@ -30,32 +31,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const API_URL = 'http://127.0.0.1:5000/api';
+
+    const API_URL = '/api';
     // Base URL for the Flask backend API — all server requests are sent to this address
 
     // Live state (loaded from DB on startup)
-    // The central state object holds ALL game data in memory — loaded from localStorage on startup
-    // Firebase Configuration (PLACEHOLDER - User needs to provide actual config)
-    const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_AUTH_DOMAIN",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_STORAGE_BUCKET",
-        messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-        appId: "YOUR_APP_ID"
-    };
-
-    // Initialize Firebase
-    try {
-        firebase.initializeApp(firebaseConfig);
-        var db_firestore = firebase.firestore();
-        console.log("Firebase initialized on client.");
-    } catch (e) {
-        console.error("Firebase initialization failed:", e);
-    }
-
     const state = {
-        user: null, // Will be set by Firebase auth state observer
+        user: null, // Will be set by Supabase auth state observer
         currentView: 'home',
         currentGame: null,
         currentStage: 'home',
@@ -417,34 +399,37 @@ document.addEventListener('DOMContentLoaded', () => {
     function init() {
         updateNavStats();
 
-        // Firebase Auth State Observer
-        firebase.auth().onAuthStateChanged(async (firebaseUser) => {
-            if (firebaseUser) {
-                console.log("Firebase user detected:", firebaseUser.uid);
-                // Get the ID token to send to backend for verification and user record creation/sync
+        // Supabase Auth State Observer
+        supabase.auth.onAuthStateChange(async (event, session) => {
+            if (session?.user) {
+                const user = session.user;
+                console.log("Supabase user detected:", user.id);
                 try {
-                    const idToken = await firebaseUser.getIdToken();
-                    const response = await fetch(`${API_URL}/auth/firebase/callback`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ idToken })
+                    const response = await fetch(`${API_URL}/auth/supabase/callback`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ session })
                     });
                     const data = await response.json();
-                    if (data.status === 'success') {
+                    if (data.status === "success") {
                         state.user = data.user;
-                        loginBtn.classList.add('hidden');
-                        const userInfo = document.getElementById('user-info');
-                        userInfo.classList.remove('hidden');
-                        userInfo.querySelector('.user-name').textContent = state.user.username;
+                        loginBtn.classList.add("hidden");
+                        const userInfo = document.getElementById("user-info");
+                        userInfo.classList.remove("hidden");
+                        userInfo.querySelector(".user-name").textContent = state.user.username;
+
+                        const avatarEl = document.getElementById("user-avatar");
+                        if (avatarEl && state.user.picture) avatarEl.src = state.user.picture;
+
                         updateNavStats();
                     }
                 } catch (e) {
-                    console.error("Firebase session persistence failed:", e);
+                    console.error("Supabase session sync failed:", e);
                 }
             } else {
                 state.user = null;
-                loginBtn.classList.remove('hidden');
-                document.getElementById('user-info').classList.add('hidden');
+                loginBtn.classList.remove("hidden");
+                document.getElementById("user-info").classList.add("hidden");
             }
         });
 
@@ -534,8 +519,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Auth — login/modal event handlers
         loginBtn.addEventListener('click', () => authModal.classList.remove('hidden')); // Open login modal
         document.querySelector('.close-modal').addEventListener('click', () => authModal.classList.add('hidden')); // Close login modal
-        googleLogin.addEventListener('click', handleGoogleLogin); // Google login button handler
-        document.getElementById('gmail-login').addEventListener('click', handleGoogleLogin); // Gmail login button handler (same function)
+
+        const googleLoginBtn = document.getElementById('google-login');
+        if (googleLoginBtn) googleLoginBtn.addEventListener('click', handleGoogleLogin);
+
+        const emailLoginBtn = document.getElementById('email-login-btn');
+        if (emailLoginBtn) emailLoginBtn.addEventListener('click', handleEmailLogin);
+
+        const emailSignupBtn = document.getElementById('email-signup-btn');
+        if (emailSignupBtn) emailSignupBtn.addEventListener('click', handleEmailSignup);
+
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) logoutBtn.addEventListener('click', handleLogout); // Logout handler
     }
 
     /* =============================================
@@ -729,34 +724,64 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* =============================================
-       AUTH — handles user login via Google/Gmail
+       AUTH — handles user login via Google Identity Services
        ============================================= */
     async function handleGoogleLogin() {
-        const provider = new firebase.auth.GoogleAuthProvider();
         try {
-            const result = await firebase.auth().signInWithPopup(provider);
-            const idToken = await result.user.getIdToken();
-
-            const response = await fetch(`${API_URL}/auth/firebase/callback`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ idToken })
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: "google",
+                options: {
+                    redirectTo: window.location.origin
+                }
             });
-
-            const data = await response.json();
-            if (data.status === 'success') {
-                state.user = data.user;
-                loginBtn.classList.add('hidden');
-                const userInfo = document.getElementById('user-info');
-                userInfo.classList.remove('hidden');
-                userInfo.querySelector('.user-name').textContent = state.user.username;
-                authModal.classList.add('hidden');
-                updateNavStats();
-                showToast(`✅ Welcome, ${state.user.username}!`);
-            }
+            if (error) throw error;
         } catch (e) {
-            console.error("Firebase Login Error:", e);
-            showToast('❌ Login failed. See console for details.');
+            console.error("Supabase Login Error:", e);
+            showToast("❌ Login failed. See console for details.");
+        }
+    }
+
+    async function handleEmailSignup() {
+        const email = document.getElementById('auth-email').value;
+        const password = document.getElementById('auth-password').value;
+        if (!email || !password) return showToast("📧 Please enter email and password");
+
+        try {
+            const { data, error } = await supabase.auth.signUp({ email, password });
+            if (error) throw error;
+            showToast("✨ Signup successful! Check your email for verification.");
+        } catch (e) {
+            console.error("Signup Error:", e.message);
+            showToast(`❌ Signup failed: ${e.message}`);
+        }
+    }
+
+    async function handleEmailLogin() {
+        const email = document.getElementById('auth-email').value;
+        const password = document.getElementById('auth-password').value;
+        if (!email || !password) return showToast("📧 Please enter email and password");
+
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            authModal.classList.add('hidden');
+            showToast("✅ Login successful");
+        } catch (e) {
+            console.error("Login Error:", e.message);
+            showToast(`❌ Login failed: ${e.message}`);
+        }
+    }
+
+    async function handleLogout() {
+        try {
+            await supabase.auth.signOut();
+            await fetch(`${API_URL}/logout`, { method: "POST" });
+            state.user = null;
+            loginBtn.classList.remove("hidden");
+            document.getElementById("user-info").classList.add("hidden");
+            showToast("👋 Logged out");
+        } catch (e) {
+            console.error("Logout error:", e);
         }
     }
 
