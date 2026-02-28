@@ -27,8 +27,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <!-- Loads GSAP (GreenSock Animation Platform) library for smooth, high-performance animations throughout the game -->
-
-    <!-- Supabase integration happens in app.js via module import -->
 </head>
 
 <body>
@@ -296,17 +294,54 @@
             <p style="margin-bottom: 2rem; color: #718096;">Sign in to save your progress and compete globally.</p>
             <!-- Subtitle explaining the benefit of logging in -->
 
-            <div id="email-auth-section"
-                style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 320px; margin-left: auto; margin-right: auto;">
-                <input type="email" id="auth-email" placeholder="Email"
-                    style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
-                <input type="password" id="auth-password" placeholder="Password"
-                    style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
-                <div style="display: flex; gap: 1rem; width: 100%;">
-                    <button id="email-login-btn" class="btn-cta"
-                        style="flex: 1; padding: 10px; font-size: 0.9rem;">Login</button>
-                    <button id="email-signup-btn" class="btn-outline"
-                        style="flex: 1; padding: 10px; font-size: 0.9rem;">Sign Up</button>
+            <div id="auth-views">
+                <!-- Login View -->
+                <div id="login-view">
+                    <div id="email-auth-section"
+                        style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 320px; margin-left: auto; margin-right: auto;">
+                        <input type="email" id="auth-email" placeholder="Email"
+                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
+                        <input type="password" id="auth-password" placeholder="Password"
+                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
+                        <button id="email-login-btn" class="btn-cta"
+                            style="padding: 10px; font-size: 0.9rem;">Login</button>
+                        <p style="font-size: 0.85rem; color: #718096;">Don't have an account? <a href="#"
+                                id="go-to-signup" style="color: #6366f1; font-weight: 600;">Sign Up</a></p>
+                    </div>
+                </div>
+
+                <!-- Signup/Profile Setup View -->
+                <div id="signup-view" class="hidden">
+                    <div
+                        style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 320px; margin-left: auto; margin-right: auto;">
+                        <input type="email" id="signup-email" placeholder="Email"
+                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
+                        <input type="password" id="signup-password" placeholder="Password"
+                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
+                        <input type="text" id="auth-username" placeholder="Choose Username"
+                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
+
+                        <div class="avatar-selection" style="text-align: left;">
+                            <p style="font-size: 0.85rem; color: #718096; margin-bottom: 0.5rem;">Pick an Avatar/Emoji:
+                            </p>
+                            <div id="avatar-picker"
+                                style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 10px;">
+                                <div class="avatar-option selected" data-avatar="🦊">🦊</div>
+                                <div class="avatar-option" data-avatar="🦁">🦁</div>
+                                <div class="avatar-option" data-avatar="🐧">🐧</div>
+                                <div class="avatar-option" data-avatar="🐼">🐼</div>
+                                <div class="avatar-option" data-avatar="🐲">🐲</div>
+                                <div class="avatar-option" data-avatar="🦄">🦄</div>
+                                <div class="avatar-option" data-avatar="🤖">🤖</div>
+                                <div class="avatar-option" data-avatar="👾">👾</div>
+                            </div>
+                        </div>
+
+                        <button id="email-signup-btn" class="btn-cta" style="padding: 10px; font-size: 0.9rem;">Create
+                            Account</button>
+                        <p style="font-size: 0.85rem; color: #718096;">Already have an account? <a href="#"
+                                id="go-to-login" style="color: #6366f1; font-weight: 600;">Log In</a></p>
+                    </div>
                 </div>
             </div>
 

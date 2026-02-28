@@ -449,6 +449,31 @@ h3 {
     width: 24px;
 }
 
+.avatar-option {
+    font-size: 2rem;
+    padding: 10px;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+}
+
+.avatar-option:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+}
+
+.avatar-option.selected {
+    background: var(--white);
+    border-color: var(--bg-purple);
+    box-shadow: 0 0 15px rgba(123, 47, 247, 0.3);
+}
+
 .underline-btn {
     background: none;
     border: none;
