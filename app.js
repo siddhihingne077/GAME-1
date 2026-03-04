@@ -201,6 +201,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } catch (e) { }
             },
 
+            // Level complete voice — speaks "Level Completed" using Web Speech API
+            levelComplete() {
+                if (muted) return;
+                if (!('speechSynthesis' in window)) return; // Browser doesn't support speech
+                setTimeout(() => {
+                    const utterance = new SpeechSynthesisUtterance('Level Completed');
+                    utterance.rate = 1.0;    // Normal speaking speed
+                    utterance.pitch = 1.2;   // Slightly higher pitch for a cheerful tone
+                    utterance.volume = 0.8;  // Slightly below max to blend with game audio
+                    window.speechSynthesis.speak(utterance);
+                }, 500); // 500ms delay so it plays after the fanfare arpeggio finishes
+            },
+
             // Background ambient music — dual mode (lobby vs suspense)
             // Lobby: soothing guitar-pluck arpeggio for menus; Suspense: slow sine-wave pulses for tense gameplay
             startBgMusic(type = 'lobby') {
@@ -387,6 +400,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loginBtn = document.getElementById('login-btn'); // Login button in the navbar
     const authModal = document.getElementById('auth-modal'); // Login modal popup
     const googleLogin = document.getElementById('google-login'); // Google login button inside the modal
+    const userInfo = document.getElementById('user-info'); // User info container in navbar
+    const userAvatar = document.getElementById('user-avatar'); // User avatar image in navbar
+    const profileModal = document.getElementById('profile-modal'); // Profile modal
 
     /* =============================================
        INIT — runs once when the page loads
@@ -582,6 +598,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('signup-view').classList.add('hidden');
             document.getElementById('login-view').classList.remove('hidden');
         });
+
+        // Profile Modal
+        if (userAvatar) {
+            userAvatar.style.cursor = 'pointer'; // Make it look clickable
+            userAvatar.addEventListener('click', showProfile);
+        }
+        document.querySelector('.close-profile').addEventListener('click', () => profileModal.classList.add('hidden'));
+    }
+
+    function showProfile() {
+        if (!state.user) return;
+
+        document.getElementById('profile-name').textContent = state.user.username;
+        document.getElementById('profile-coins').textContent = state.coins;
+        document.getElementById('profile-stars').textContent = state.stars;
+
+        const profileAvatar = document.getElementById('profile-avatar');
+        if (profileAvatar && state.user.picture) {
+            profileAvatar.src = state.user.picture;
+        }
+
+        profileModal.classList.remove('hidden');
+        gsap.from('.profile-card', { opacity: 0, scale: 0.9, y: 20, duration: 0.5, ease: "back.out(1.7)" });
     }
 
     /* =============================================
@@ -1379,8 +1418,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         DB.save(state);
         updateNavStats();
 
-        // Success sound
-        if (success) SoundEngine.fanfare();
+        // Success sound + voice announcement
+        if (success) {
+            SoundEngine.fanfare();
+            SoundEngine.levelComplete(); // Speak "Level Completed" after the fanfare
+        }
 
         // Sync with backend
         syncScore('memory', score, level, { success, starsEarned });
