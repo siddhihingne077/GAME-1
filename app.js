@@ -26,12 +26,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    const API_URL = 'http://127.0.0.1:5000/api';
+    const API_URL = '/api';
     // Base URL for the Flask backend API — all server requests are sent to this address
 
     // Live state (loaded from DB on startup)
     const state = {
-        user: null, // Will be set by Supabase auth state observer
         currentView: 'home',
         currentGame: null,
         currentStage: 'home',
@@ -360,12 +359,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loader = document.getElementById('loader'); // Loading screen container
     const app = document.getElementById('app'); // Main app container (hidden during loading)
     const mainContent = document.getElementById('main-content'); // Dynamic content area where game views are rendered
-    const loginBtn = document.getElementById('login-btn'); // Login button in the navbar
-    const authModal = document.getElementById('auth-modal'); // Login modal popup
-    const googleLogin = document.getElementById('google-login'); // Google login button inside the modal
-    const userInfo = document.getElementById('user-info'); // User info container in navbar
-    const userAvatar = document.getElementById('user-avatar'); // User avatar image in navbar
-    const profileModal = document.getElementById('profile-modal'); // Profile modal
 
     /* =============================================
        INIT — runs once when the page loads
@@ -468,45 +461,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 opt.classList.add('selected');
             });
         });
-
-        // View Toggles in Auth Modal
-        const goToSignup = document.getElementById('go-to-signup');
-        if (goToSignup) goToSignup.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('login-view').classList.add('hidden');
-            document.getElementById('signup-view').classList.remove('hidden');
-        });
-
-        const goToLogin = document.getElementById('go-to-login');
-        if (goToLogin) goToLogin.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('signup-view').classList.add('hidden');
-            document.getElementById('login-view').classList.remove('hidden');
-        });
-
-        // Profile Modal
-        if (userAvatar) {
-            userAvatar.style.cursor = 'pointer'; // Make it look clickable
-            userAvatar.addEventListener('click', showProfile);
-        }
-        const closeProfileBtn = document.querySelector('.close-profile');
-        if (closeProfileBtn) closeProfileBtn.addEventListener('click', () => profileModal.classList.add('hidden'));
-    }
-
-    function showProfile() {
-        if (!state.user) return;
-
-        document.getElementById('profile-name').textContent = state.user.username;
-        document.getElementById('profile-coins').textContent = state.coins;
-        document.getElementById('profile-stars').textContent = state.stars;
-
-        const profileAvatar = document.getElementById('profile-avatar');
-        if (profileAvatar && state.user.picture) {
-            profileAvatar.src = state.user.picture;
-        }
-
-        profileModal.classList.remove('hidden');
-        gsap.from('.profile-card', { opacity: 0, scale: 0.9, y: 20, duration: 0.5, ease: "back.out(1.7)" });
 
     }
 
