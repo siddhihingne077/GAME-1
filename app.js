@@ -31,8 +31,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    const API_URL = 'http://127.0.0.1:5000/api';
-    // Base URL for the Flask backend API — all server requests are sent to this address
+    const API_URL = '/api';
+    // Base URL for the Flask backend API — using relative path so it works on any port
 
     // Live state (loaded from DB on startup)
     const state = {

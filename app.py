@@ -357,12 +357,10 @@ def serve_static(filename):
     return send_from_directory('.', filename)
     # Sends the requested file from the project root directory to the browser
 
-    # Firebase initialization handled at top level now
-    pass
-
-    # Port is set to 5000 by default or via env
-    port = int(os.getenv("PORT", 5000))
-    # Reads the port number from environment variable; defaults to 5000
+if __name__ == '__main__':
+    # Port is set to 5001 by default or via env
+    port = int(os.getenv("PORT", 5001))
+    # Reads the port number from environment variable; defaults to 5001
 
     app.run(debug=True, host='0.0.0.0', port=port)
-    # Starts the Flask development server: debug=True enables auto-reload and error pages, host='0.0.0.0' makes it accessible from any network interface
+    # Starts the Flask development server
