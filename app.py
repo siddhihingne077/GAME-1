@@ -41,91 +41,7 @@ def update_user(user_id, data):
 def index():
     return send_from_directory('.', 'index.html')
 
-# ── Supabase Auth Callback ───────────────────────────────
-@app.route('/auth/supabase/callback', methods=['POST'])
-def supabase_callback():
-    """Receives Supabase session data from the frontend.
-       In a production app, the backend should verify the JWT using the Supabase JWT Secret."""
-    data = request.json
-    session_data = data.get('session')
-    if not session_data:
-        return jsonify({"status": "error", "message": "No session provided"}), 400
-
-    user = session_data.get('user')
-    if not user:
-        return jsonify({"status": "error", "message": "No user in session"}), 400
-
-    uid = user['id']
-    email = user.get('email')
-    user_metadata = user.get('user_metadata', {})
-    name = user_metadata.get('full_name', email.split('@')[0])
-    picture = user_metadata.get('avatar_url', '')
-
-    # Use Firestore to find or create user (keeping Firestore for data storage for now)
-    # If the user wants to migrate DB too, we'd use Supabase DB here.
-    if db_firestore:
-        user_ref = db_firestore.collection('users').document(uid)
-        user_doc = user_ref.get()
-
-        if user_doc.exists:
-            user_data = user_doc.to_dict()
-            user_data.update({
-                "username": name,
-                "picture": picture
-            })
-            user_ref.set(user_data, merge=True)
-        else:
-            user_data = {
-                "id": uid,
-                "email": email,
-                "username": name,
-                "picture": picture,
-                "coins": 0,
-                "stars": 0
-            }
-            user_ref.set(user_data)
-    else:
-        # Fallback if Firestore is not available
-        user_data = {
-            "id": uid,
-            "email": email,
-            "username": name,
-            "picture": picture,
-            "coins": 0,
-            "stars": 0
-        }
-
-    # Store UID in session
-    session['user_id'] = uid
-
-    return jsonify({
-        "status": "success",
-        "user": user_data
-    })
-
-# ── Session Check ─────────────────────────────────────────
-@app.route('/api/me', methods=['GET'])
-def get_me():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"status": "not_logged_in"}), 200
-
-    user_data = get_user(user_id)
-    if not user_data:
-        session.pop('user_id', None)
-        return jsonify({"status": "not_logged_in"}), 200
-
-    return jsonify({
-        "status": "success",
-        "user": user_data
-    })
-
-# ── Logout ────────────────────────────────────────────────
-@app.route('/api/logout', methods=['POST'])
-def logout():
-    """Clears the server-side session, logging the user out."""
-    session.pop('user_id', None)
-    return jsonify({"status": "success"})
+# Supabase and session auth routes removed
 
 # ── Legacy login (kept as fallback for offline mode) ──────
 @app.route('/api/login', methods=['POST'])
@@ -357,10 +273,12 @@ def serve_static(filename):
     return send_from_directory('.', filename)
     # Sends the requested file from the project root directory to the browser
 
-if __name__ == '__main__':
-    # Port is set to 5001 by default or via env
-    port = int(os.getenv("PORT", 5001))
-    # Reads the port number from environment variable; defaults to 5001
+if __name__ == "__main__":
+    # Firebase initialization handled at top level now
+    
+    # Port is set to 5000 by default or via env
+    port = int(os.getenv("PORT", 5000))
+    # Reads the port number from environment variable; defaults to 5000
 
     app.run(debug=True, host='0.0.0.0', port=port)
-    # Starts the Flask development server
+    # Starts the Flask development server: debug=True enables auto-reload and error pages, host='0.0.0.0' makes it accessible from any network interface

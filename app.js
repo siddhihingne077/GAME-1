@@ -1,9 +1,4 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
-
-const supabase = createClient(
-    "https://ibpakzvcjlptczjbsrlx.supabase.co",
-    "sb_publishable_PLQXjQdvV_xMashWTv4lLw_SDEQWYnn"
-)
+// Supabase removed - restoring local game mode
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Waits for the entire HTML page to finish loading before running any game code — prevents errors from accessing elements that don't exist yet
@@ -31,8 +26,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    const API_URL = '/api';
-    // Base URL for the Flask backend API — using relative path so it works on any port
+    const API_URL = 'http://127.0.0.1:5000/api';
+    // Base URL for the Flask backend API — all server requests are sent to this address
 
     // Live state (loaded from DB on startup)
     const state = {
@@ -201,19 +196,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } catch (e) { }
             },
 
-            // Level complete voice — speaks "Level Completed" using Web Speech API
-            levelComplete() {
-                if (muted) return;
-                if (!('speechSynthesis' in window)) return; // Browser doesn't support speech
-                setTimeout(() => {
-                    const utterance = new SpeechSynthesisUtterance('Level Completed');
-                    utterance.rate = 1.0;    // Normal speaking speed
-                    utterance.pitch = 1.2;   // Slightly higher pitch for a cheerful tone
-                    utterance.volume = 0.8;  // Slightly below max to blend with game audio
-                    window.speechSynthesis.speak(utterance);
-                }, 500); // 500ms delay so it plays after the fanfare arpeggio finishes
-            },
-
             // Background ambient music — dual mode (lobby vs suspense)
             // Lobby: soothing guitar-pluck arpeggio for menus; Suspense: slow sine-wave pulses for tense gameplay
             startBgMusic(type = 'lobby') {
@@ -362,33 +344,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     })(); // Immediately invoked — SoundEngine is ready to use right away
 
     async function syncScore(gameType, score, level = 1, extraData = {}) {
-        // Sends the player's game results to Supabase for persistent tracking
-        if (!state.user) return; // Can't sync if not logged in
-        try {
-            const { data, error } = await supabase
-                .from('game_progress')
-                .upsert({
-                    user_id: state.user.id,
-                    level: level,
-                    score: score,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id' }); // Assuming one record per user for progress
+        // Updated to work locally only
+        const coinsGained = gameType === 'memory' ? (score >= Math.ceil(5 * 0.6) ? 1 : 0) : (gameType === 'f1' ? 20 : (gameType === 'schulte' ? 30 : Math.floor(score / 10)));
+        const starsGained = gameType === 'memory' ? (score === 5 ? 3 : (score >= 4 ? 2 : (score >= 3 ? 1 : 0))) : (gameType === 'schulte' ? 2 : (gameType === 'confusion' ? Math.floor(score / 5) : 0));
 
-            if (error) throw error;
-
-            // Still update state for coins/stars (normally these would be in DB too)
-            const coinsGained = gameType === 'memory' ? (score >= Math.ceil(5 * 0.6) ? 1 : 0) : (gameType === 'f1' ? 20 : (gameType === 'schulte' ? 30 : Math.floor(score / 10)));
-            const starsGained = gameType === 'memory' ? (score === 5 ? 3 : (score >= 4 ? 2 : (score >= 3 ? 1 : 0))) : (gameType === 'schulte' ? 2 : (gameType === 'confusion' ? Math.floor(score / 5) : 0));
-
-            state.coins += coinsGained;
-            state.stars += starsGained;
-            updateNavStats();
-            DB.save(state);
-
-            console.log("Progress synced to Supabase:", data);
-        } catch (e) {
-            console.error("Supabase sync failed:", e);
-        }
+        state.coins += coinsGained;
+        state.stars += starsGained;
+        updateNavStats();
+        DB.save(state);
     }
 
     /* =============================================
@@ -411,71 +374,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function init() {
         updateNavStats();
-
-        // --- ADDED AUTH CHECK ---
-        if (supabase) {
-            const { data: { session }, error } = await supabase.auth.getSession();
-            if (!session) {
-                console.log("No active session, redirecting to login...");
-                window.location.href = 'login.html';
-                return; // Stop initialization if not authorized
-            }
-        }
-
-        // initGoogleAuth(); // Initialize Google Identity Services - Removed as it's undefined and handled by Supabase
-
-        // Supabase Auth State Observer
-        supabase.auth.onAuthStateChange(async (event, session) => {
-            if (session?.user) {
-                const user = session.user;
-                console.log("Supabase user session detected:", event);
-
-                state.user = {
-                    id: user.id,
-                    email: user.email,
-                    username: user.user_metadata?.username || user.email.split('@')[0],
-                    picture: user.user_metadata?.avatar_emoji || "🦊"
-                };
-
-                loginBtn.classList.add("hidden");
-                const userInfo = document.getElementById("user-info");
-                userInfo.classList.remove("hidden");
-                userInfo.querySelector(".user-name").textContent = state.user.username;
-
-                const avatarEl = document.getElementById("user-avatar");
-                if (avatarEl) {
-                    // If it's an emoji, we might need a different display, but for now we replace src for generic use or just show text
-                    if (state.user.picture.length <= 2) {
-                        // It's an emoji
-                        avatarEl.style.display = 'none';
-                        let emojiSpan = userInfo.querySelector(".user-emoji");
-                        if (!emojiSpan) {
-                            emojiSpan = document.createElement('span');
-                            emojiSpan.className = "user-emoji";
-                            emojiSpan.style.fontSize = "1.5rem";
-                            emojiSpan.style.marginRight = "10px";
-                            userInfo.insertBefore(emojiSpan, avatarEl);
-                        }
-                        emojiSpan.textContent = state.user.picture;
-                        emojiSpan.style.display = 'inline';
-                    } else {
-                        avatarEl.src = state.user.picture;
-                        avatarEl.style.display = 'inline';
-                        if (userInfo.querySelector(".user-emoji")) userInfo.querySelector(".user-emoji").style.display = 'none';
-                    }
-                }
-
-                // Load progress from Supabase
-                loadUserProgress();
-                updateNavStats();
-                authModal.classList.add('hidden');
-            } else {
-                state.user = null;
-                loginBtn.classList.remove("hidden");
-                document.getElementById("user-info").classList.add("hidden");
-                if (document.querySelector(".user-emoji")) document.querySelector(".user-emoji").style.display = 'none';
-            }
-        });
 
         let progress = 0;
         const progressFill = document.getElementById('loader-progress');
@@ -560,21 +458,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Starts the game identified by the button's data-game attribute
         });
 
-        // Auth — login/modal event handlers
-        loginBtn.addEventListener('click', () => authModal.classList.remove('hidden')); // Open login modal
-        document.querySelector('.close-modal').addEventListener('click', () => authModal.classList.add('hidden')); // Close login modal
-
-        const googleLoginBtn = document.getElementById('google-login');
-        if (googleLoginBtn) googleLoginBtn.addEventListener('click', handleGoogleLogin);
-
-        const emailLoginBtn = document.getElementById('email-login-btn');
-        if (emailLoginBtn) emailLoginBtn.addEventListener('click', handleEmailLogin);
-
-        const emailSignupBtn = document.getElementById('email-signup-btn');
-        if (emailSignupBtn) emailSignupBtn.addEventListener('click', handleEmailSignup);
-
         const logoutBtn = document.getElementById('logout-btn');
-        if (logoutBtn) logoutBtn.addEventListener('click', handleLogout); // Logout handler
+        // if (logoutBtn) logoutBtn.addEventListener('click', handleLogout); // Removed Supabase logout
 
         // Avatar Picker
         document.querySelectorAll('.avatar-option').forEach(opt => {
@@ -604,7 +489,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             userAvatar.style.cursor = 'pointer'; // Make it look clickable
             userAvatar.addEventListener('click', showProfile);
         }
-        document.querySelector('.close-profile').addEventListener('click', () => profileModal.classList.add('hidden'));
+        const closeProfileBtn = document.querySelector('.close-profile');
+        if (closeProfileBtn) closeProfileBtn.addEventListener('click', () => profileModal.classList.add('hidden'));
     }
 
     function showProfile() {
@@ -621,6 +507,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         profileModal.classList.remove('hidden');
         gsap.from('.profile-card', { opacity: 0, scale: 0.9, y: 20, duration: 0.5, ease: "back.out(1.7)" });
+
     }
 
     /* =============================================
@@ -816,127 +703,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     /* =============================================
        AUTH — handles user login via Google Identity Services
        ============================================= */
-    async function handleGoogleLogin() {
-        try {
-            const { data, error } = await supabase.auth.signInWithOAuth({
-                provider: "google",
-                options: {
-                    redirectTo: window.location.origin
-                }
-            });
-            if (error) throw error;
-        } catch (e) {
-            console.error("Supabase Login Error:", e);
-            showToast("❌ Login failed. See console for details.");
-        }
-    }
-
-    async function handleEmailSignup() {
-        const email = document.getElementById('signup-email').value;
-        const password = document.getElementById('signup-password').value;
-        const username = document.getElementById('auth-username').value;
-        const avatar = document.querySelector('.avatar-option.selected')?.getAttribute('data-avatar') || "🦊";
-
-        if (!email || !password || !username) return showToast("📧 Please fill all fields");
-
-        try {
-            const { data, error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        username: username,
-                        avatar_emoji: avatar
-                    }
-                }
-            });
-            if (error) throw error;
-            showToast("✨ Signup successful! Please log in.");
-            document.getElementById('signup-view').classList.add('hidden');
-            document.getElementById('login-view').classList.remove('hidden');
-        } catch (e) {
-            console.error("Signup Error:", e.message);
-            showToast(`❌ Signup failed: ${e.message}`);
-        }
-    }
-
-    async function handleEmailLogin() {
-        const email = document.getElementById('auth-email').value;
-        const password = document.getElementById('auth-password').value;
-        if (!email || !password) return showToast("📧 Please enter email and password");
-
-        try {
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) throw error;
-            showToast("✅ Welcome back!");
-        } catch (e) {
-            console.error("Login Error:", e.message);
-            showToast(`❌ Login failed: ${e.message}`);
-        }
-    }
-
-    async function handleLogout() {
-        // Logout user and clear session
-        try {
-            // --- NEW LOGGING LOGIC ---
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { error } = await supabase.from('logout_logs').insert({
-                    user_id: user.id,
-                    email: user.email,
-                    logout_time: new Date().toISOString(),
-                    device_info: navigator.userAgent
-                });
-                if (error) console.error("Failed to log logout:", error);
-            }
-
-            await supabase.auth.signOut();
-            await fetch(`${API_URL}/logout`, { method: 'POST' });
-        } catch (e) {
-            console.log('Logout API or Supabase failed:', e);
-        }
-
-        state.user = null;
-        localStorage.removeItem('mastermind_user');
-
-        loginBtn.classList.remove('hidden');
-        document.getElementById('user-info').classList.add('hidden');
-
-        if (window.google) google.accounts.id.disableAutoSelect();
-        showToast('👋 Logged out');
-
-        // --- REDIRECT TO LOGIN ---
-        setTimeout(() => {
-            window.location.href = 'login.html';
-        }, 1000);
-    }
-
-    async function loadUserProgress() {
-        if (!state.user) return;
-        try {
-            const { data, error } = await supabase
-                .from('game_progress')
-                .select('*')
-                .eq('user_id', state.user.id)
-                .single();
-
-            if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "no rows found"
-
-            if (data) {
-                console.log("Loaded progress from Supabase:", data);
-                state.memory.level = data.level || 1;
-                // You can add more mapping here if you want to store coins/stars in DB too
-                showToast(`🎮 Progress loaded! Room Observer Level: ${data.level}`);
-
-                // If they are on the home view, refresh it to show correct level
-                if (state.currentView === 'home' && state.currentStage === 'home') {
-                    goBack();
-                }
-            }
-        } catch (e) {
-            console.error("Failed to load progress:", e);
-        }
-    }
+    /* Auth and Progress loading removed for local play */
 
     /* =============================================
        TOAST NOTIFICATION — brief popup messages at the bottom of the screen
@@ -1418,11 +1185,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         DB.save(state);
         updateNavStats();
 
-        // Success sound + voice announcement
-        if (success) {
-            SoundEngine.fanfare();
-            SoundEngine.levelComplete(); // Speak "Level Completed" after the fanfare
-        }
+        // Success sound
+        if (success) SoundEngine.fanfare();
 
         // Sync with backend
         syncScore('memory', score, level, { success, starsEarned });

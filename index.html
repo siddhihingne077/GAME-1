@@ -36,6 +36,8 @@
         <!-- Loading screen container — shown while the game initializes, hidden once loading completes -->
 
         <h1 class="logo-text main-title">MASTER<span>MIND</span></h1>
+        <div style="background: red; color: white; padding: 10px; position: fixed; top: 0; left: 0; z-index: 10000;">
+            DEBUG: VERSION 2.0</div>
         <!-- Game logo text displayed during loading; "MIND" is wrapped in a span for different color styling -->
 
         <div class="progress-bar-container" style="width: 250px; margin-top: 30px;">
@@ -91,22 +93,8 @@
                         <!-- Displays the player's total stars; the span is updated dynamically by JavaScript -->
                     </div>
 
-                    <button id="login-btn" class="btn-cta" style="padding: 8px 20px; width: auto;">Login</button>
-                    <!-- Login button — opens the authentication modal; hidden after the user logs in -->
+                    <!-- User profiles and login removed for local play -->
 
-                    <div id="user-info" class="hidden" style="display: inline-flex; align-items: center;">
-                        <!-- User info display — hidden by default, shown after login to display the player's name and avatar -->
-
-                        <span class="user-name" style="margin-right: 10px; font-weight: 600;"></span>
-                        <!-- Placeholder for the logged-in user's display name; filled by JavaScript after login -->
-
-                        <img id="user-avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar"
-                            style="width: 40px; border-radius: 50%; vertical-align: middle;">
-                        <!-- User avatar image from Google OAuth or DiceBear API; displayed as a circular 40px icon -->
-
-                        <button id="logout-btn" class="underline-btn"
-                            style="margin-left: 10px; font-size: 0.8rem; padding: 0;">Logout</button>
-                    </div>
                 </div>
             </div>
         </nav>
@@ -274,131 +262,10 @@
         </main>
     </div>
 
-    <!-- Login Modal -->
-    <!-- Authentication popup that appears when the user clicks the Login button -->
-
-    <div id="auth-modal" class="modal hidden">
-        <!-- Modal overlay container — hidden by default; shown when user clicks Login -->
-
-        <div class="modal-overlay"></div>
-        <!-- Semi-transparent dark background behind the modal card to dim the page content -->
-
-        <div class="game-overlay auth-card">
-            <!-- The actual login card with glassmorphism styling -->
-
-            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Welcome Back</h2>
-            <!-- Modal heading welcoming the user -->
-
-            <p style="margin-bottom: 2rem; color: #718096;">Sign in to save your progress and compete globally.</p>
-            <!-- Subtitle explaining the benefit of logging in -->
-
-            <div id="auth-views">
-                <!-- Login View -->
-                <div id="login-view">
-                    <div id="email-auth-section"
-                        style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 320px; margin-left: auto; margin-right: auto;">
-                        <input type="email" id="auth-email" placeholder="Email"
-                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
-                        <input type="password" id="auth-password" placeholder="Password"
-                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
-                        <button id="email-login-btn" class="btn-cta"
-                            style="padding: 10px; font-size: 0.9rem;">Login</button>
-                        <p style="font-size: 0.85rem; color: #718096;">Don't have an account? <a href="#"
-                                id="go-to-signup" style="color: #6366f1; font-weight: 600;">Sign Up</a></p>
-                    </div>
-                </div>
-
-                <!-- Signup/Profile Setup View -->
-                <div id="signup-view" class="hidden">
-                    <div
-                        style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 320px; margin-left: auto; margin-right: auto;">
-                        <input type="email" id="signup-email" placeholder="Email"
-                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
-                        <input type="password" id="signup-password" placeholder="Password"
-                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
-                        <input type="text" id="auth-username" placeholder="Choose Username"
-                            style="padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: rgba(255,255,255,0.8); width: 100%; box-sizing: border-box;">
-
-                        <div class="avatar-selection" style="text-align: left;">
-                            <p style="font-size: 0.85rem; color: #718096; margin-bottom: 0.5rem;">Pick an Avatar/Emoji:
-                            </p>
-                            <div id="avatar-picker"
-                                style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 10px;">
-                                <div class="avatar-option selected" data-avatar="🦊">🦊</div>
-                                <div class="avatar-option" data-avatar="🦁">🦁</div>
-                                <div class="avatar-option" data-avatar="🐧">🐧</div>
-                                <div class="avatar-option" data-avatar="🐼">🐼</div>
-                                <div class="avatar-option" data-avatar="🐲">🐲</div>
-                                <div class="avatar-option" data-avatar="🦄">🦄</div>
-                                <div class="avatar-option" data-avatar="🤖">🤖</div>
-                                <div class="avatar-option" data-avatar="👾">👾</div>
-                            </div>
-                        </div>
-
-                        <button id="email-signup-btn" class="btn-cta" style="padding: 10px; font-size: 0.9rem;">Create
-                            Account</button>
-                        <p style="font-size: 0.85rem; color: #718096;">Already have an account? <a href="#"
-                                id="go-to-login" style="color: #6366f1; font-weight: 600;">Log In</a></p>
-                    </div>
-                </div>
-            </div>
-
-            <div
-                style="margin: 1.5rem 0; display: flex; align-items: center; gap: 1rem; color: #718096; font-size: 0.8rem; width: 100%; max-width: 320px; margin-left: auto; margin-right: auto;">
-                <div style="flex: 1; height: 1px; background: #e2e8f0;"></div>
-                <span>OR</span>
-                <div style="flex: 1; height: 1px; background: #e2e8f0;"></div>
-            </div>
-
-            <div class="login-options" style="display: flex; justify-content: center; margin-bottom: 1rem;">
-                <!-- Container for the social login buttons -->
-                <button id="google-login" class="btn-outline"
-                    style="display: flex; align-items: center; gap: 10px; padding: 10px 20px; width: 100%; max-width: 320px; justify-content: center;">
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"
-                        height="18">
-                    Continue with Google
-                </button>
-            </div>
-
-            <button class="close-modal underline-btn">Maybe Later</button>
-            <!-- Close button to dismiss the login modal without signing in -->
-        </div>
-    </div>
+    <!-- Auth Modal removed -->
 
     <!-- Profile Modal -->
-    <div id="profile-modal" class="modal hidden">
-        <div class="modal-overlay"></div>
-        <div class="game-overlay profile-card">
-            <h2 style="font-size: 2.5rem; margin-bottom: 1rem;">Personal Profile</h2>
-
-            <div class="profile-header"
-                style="display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-bottom: 2rem;">
-                <img id="profile-avatar" src="" alt="Avatar"
-                    style="width: 100px; height: 100px; border-radius: 50%; border: 4px solid var(--bg-purple);">
-                <h3 id="profile-name" style="font-size: 1.8rem; color: var(--text-dark);"></h3>
-            </div>
-
-            <div class="profile-stats-grid"
-                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
-                <div class="stat-card">
-                    <div class="icon-circle"
-                        style="background: var(--pastel-mint); width: 40px; height: 40px; margin: 0 auto 0.5rem; border-radius: 50%; display: flex; justify-content: center; align-items: center;">
-                        🪙</div>
-                    <h3 style="font-size: 0.8rem; margin:0; color: var(--text-dim);">COINS</h3>
-                    <h2 id="profile-coins" style="margin: 5px 0 0 0; font-size: 1.5rem;">0</h2>
-                </div>
-                <div class="stat-card">
-                    <div class="icon-circle"
-                        style="background: var(--pastel-pink); width: 40px; height: 40px; margin: 0 auto 0.5rem; border-radius: 50%; display: flex; justify-content: center; align-items: center;">
-                        ⭐</div>
-                    <h3 style="font-size: 0.8rem; margin:0; color: var(--text-dim);">STARS</h3>
-                    <h2 id="profile-stars" style="margin: 5px 0 0 0; font-size: 1.5rem;">0</h2>
-                </div>
-            </div>
-
-            <button class="btn-cta close-profile" style="width: auto; padding: 12px 40px;">Back to Game</button>
-        </div>
-    </div>
+    <!-- Profile Modal removed -->
 
     <!-- Loads the main game JavaScript file that contains all game logic, state management, sound engine, and UI rendering -->
     <script type="module" src="app.js"></script>
